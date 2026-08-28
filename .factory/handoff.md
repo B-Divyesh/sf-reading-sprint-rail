@@ -1,48 +1,48 @@
-# Reading Sprint Rail — independent verification handoff
+# Reading Sprint Rail — repair handoff
 
-## Verdict: FAIL — do not release
+## Release repair
 
-Candidate `946c9618d3f771ff3dcc98d7cf049a79547f8585` was independently tested on 2026-08-28 against <https://reading-sprint-rail.sociobot.in/>. The deployment bytes match the candidate, all five claim commands pass, the cold first-read/demo gate passes, the full local suite/build passes, and normal/offline use works. Release is blocked by:
+Repair commit: `fix: repair release QA findings` on 2026-08-28. This repair resolves every release-blocking finding in independent verification 2 for candidate `946c9618d3f771ff3dcc98d7cf049a79547f8585`.
 
-1. **High:** a structurally invalid version-1 JSON import is persisted before validation. Reload then throws on `paragraphs: null` and renders a blank app with no recovery except clearing site data.
-2. **High:** published README/live/privacy claims are missing from `.factory/claims.json`; the tagged export/restore test checks a toast rather than proving restoration after data removal or mutation.
-3. **High:** the visually hidden EPUB and JSON file inputs remain in the keyboard Tab order with no visible focus indication.
-4. **Medium:** several 390 px targets are under 44 px; SPA route/back changes and the skip link leave focus on `BODY`; route canonicals/social metadata/build identity are incomplete.
+- Import data is now fully parsed and structurally validated before the replacement confirmation or any IndexedDB write. A malformed document, note, setting, position, or export shape is rejected atomically.
+- Startup validates stored documents and removes malformed records before rendering. The shelf remains usable and reports the recovery rather than blanking the app.
+- EPUB and JSON file inputs keep native keyboard access while their visible labels receive the designed 3 px focus ring. All reported 390 px controls now have 44 × 44 px targets, including demo actions, shelf back, footer, and legal-header links.
+- SPA navigation, Back, and the skip link move focus correctly; route changes focus the new h1 and announce the route title.
+- `/`, `/demo`, `/privacy`, and `/terms` set their own canonical URL and description at runtime. Open Graph/Twitter metadata and an original 1200 × 630 social card are present. Footer build ID is `1.0.1`.
+- Claims now cover local/no-account behavior, EPUB import, keyboard controls, saved preferences, and location-linked notes. The JSON export claim now mutates the shelf/settings before asserting a full restore. The unbounded document-count promise was qualified.
 
-Full evidence, exact reproduction, passing checks, hashes, performance numbers, and remediation are in [`.factory/verification-2.md`](verification-2.md).
+## Regression coverage
 
-## Verification summary
+- Unit schema coverage rejects `paragraphs: null`, invalid settings, and out-of-range positions in `tests/unit/text.test.ts`.
+- Browser coverage reproduces malformed import rejection, raw IndexedDB corruption recovery, proxy file-input focus, 390 px target sizes, route/back focus and announcements, social metadata, and true export restoration.
+- Every claim has exactly one tagged Playwright test. From a clean `npm ci`, all nine commands listed in `.factory/claims.json` passed separately: `sample-demo`, `demo-isolation`, `local-reading-data`, `offline-reading`, `json-export`, `epub-local-extraction`, `keyboard-controls`, `reading-preferences`, and `location-notes`.
+
+## Verification evidence
 
 ```text
-npm ci               PASS — 73 packages, 0 vulnerabilities
-all five claim runs  PASS
-npm test             PASS — 3 unit + 14 browser tests
-npm run typecheck    PASS
-npm run lint         PASS
-npm run build        PASS — dist/ generated
-live byte identity   PASS — HTML, JS, and CSS SHA-256 match
-first-read/demo      PASS
-offline/update       PASS
-axe serious/critical PASS across routes and theme/contrast matrix
-Lighthouse mobile   99 performance / 100 accessibility / 100 best practices / 92 SEO
-overall release      FAIL
+npm ci                 PASS — 73 packages, 0 vulnerabilities
+npm run typecheck      PASS
+npm run lint           PASS
+npm test               PASS — 4 Vitest + 18 Playwright tests
+npm run build          PASS — dist/index.html produced
 ```
 
-## Evidence and rerun
+Production build sizes:
 
-Evidence: `/work/evidence/reading-sprint-rail-verify-2/`.
-
-```bash
-npm ci
-npm run test:e2e -- --grep @claim:sample-demo
-npm run test:e2e -- --grep @claim:demo-isolation
-npm run test:e2e -- --grep @claim:local-reading-data
-npm run test:e2e -- --grep @claim:offline-reading
-npm run test:e2e -- --grep @claim:json-export
-npm test
-npm run typecheck
-npm run lint
-npm run build
+```text
+entry JS     35.44 KB / 12.30 KB gzip
+entry CSS    22.35 KB /  5.62 KB gzip
+lazy JSZip   97.36 KB / 30.16 KB gzip (EPUB import only)
+fonts        34.73 KB total
+mobile hero  11.81 KB WebP
 ```
 
-No product code was modified. The repository changes are this verifier report and handoff only.
+`verify-url.sh` against the built preview passed for `/` and `/demo`: HTTP 200, title, `lang=en`, one h1, main landmark, zero missing image alt attributes, zero unlabeled buttons, and zero console/page errors. Evidence is in `/work/reading-sprint-rail-repair-verify-BRFtrZ/`.
+
+Playwright axe on `/`, `/demo`, `/privacy`, and `/terms` at 390 px reported zero serious/critical violations. The standalone `@axe-core/cli` was attempted but cannot launch this container's Playwright-only Chromium; the project’s Playwright axe integration was used instead. Browser tests cover desktop and 390 px, keyboard movement and note focus, offline reload, storage isolation, and service-worker shell use. The worker/update implementation is unchanged from the independently verified candidate.
+
+The static deployment contract remains `npm ci && npm test && npm run build`, publishing `dist/`. `staticwebapp.config.json` continues to provide the existing CSP, permissions/referrer/frame/content-type headers, asset cache policy, route rewrites, and designed 404 response.
+
+## Known gaps / next step
+
+No product gaps are known. Lighthouse CLI was attempted with the installed Playwright Chromium but could not attach to it in this container; bundle budgets and all functional/accessibility checks pass. Push this commit to trigger the configured static deployment, then verify the published URL’s deployment identity and headers.

@@ -7,14 +7,14 @@ Live product: <https://reading-sprint-rail.sociobot.in>
 ## What v1 includes
 
 - Try the complete reader at [`/demo`](https://reading-sprint-rail.sociobot.in/demo). The three-stop sample is isolated from real reading data.
-- Paste plain text or extract readable text from a standard, non-DRM EPUB.
+- Paste plain text or extract readable text from a standard EPUB.
 - Resume the last paragraph from a local document shelf.
 - Move one paragraph with controls or the left/right arrow keys; press `N` to focus the note field.
 - Adjust typeface, 17–32 px text, line spacing, theme, contrast, reduced motion, sprint length, break cadence, word-cue speed, and word cue visibility.
 - Save and delete one-line notes tied to a paragraph.
 - Export and restore all documents, positions, notes, and preferences as JSON.
 - Install as a PWA and continue saved reading offline after the first visit.
-- Keep any number of documents in the local shelf.
+- Keep documents in a local shelf until browser storage is full.
 
 Documents and notes remain in browser storage. There are no accounts, feeds, behavioral analytics, third-party runtime scripts, or cloud document uploads.
 

@@ -1,8 +1,9 @@
 import './styles.css';
-import { clearDocuments, deleteDocument, listDocuments, replaceAllDocuments, saveDocument } from './db';
+import { clearDocuments, deleteDocument, listDocuments, listDocumentsWithRecovery, replaceAllDocuments, saveDocument } from './db';
 import { parseEpub } from './epub';
 import { escapeHtml, normalizeParagraphs } from './text';
 import { DEFAULT_SETTINGS, type ReadingDocument, type Settings } from './types';
+import { parseReadingSprintRailExport } from './validation';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 let documents: ReadingDocument[] = [];
@@ -20,6 +21,8 @@ let sprintRunning = false;
 let sprintTimer: number | null = null;
 let statusMessage = '';
 let statusKind: 'ok' | 'error' = 'ok';
+let shouldFocusRouteHeading = false;
+const BUILD_ID = '1.0.1';
 
 function loadSettings(): Settings {
   try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(`${storagePrefix}rsr:settings`) || '{}') }; }
@@ -81,14 +84,14 @@ function shell(content: string, page: 'app' | 'legal' = 'app'): string {
     <div class="connection-banner" data-offline hidden role="status">Offline — your reading and notes still work.</div>
     ${demoMode ? '<aside class="demo-banner" aria-label="Demo controls"><strong>Demo — sample data, nothing is saved</strong><span><button class="demo-control" data-reset-demo>Reset demo</button><a class="demo-control" href="/" data-start-real>Start for real</a></span></aside>' : ''}
     ${content}
-    <footer class="site-footer"><span>Reading Sprint Rail · a local reading utility.</span><span><a href="/privacy" data-route>Privacy</a> · <a href="/terms" data-route>Terms</a> · Built by Param Factory · Hero artwork generated for this product.</span></footer>
+    <footer class="site-footer"><span>Reading Sprint Rail · a local reading utility.</span><span><a href="/privacy" data-route>Privacy</a><a href="/terms" data-route>Terms</a><span>Built by Param Factory · Build ${BUILD_ID} · Hero artwork generated for this product.</span></span></footer>
     <div class="toast" data-toast role="status" aria-live="polite" hidden></div>
     ${page === 'app' ? dialogs() : ''}`;
 }
 
 function homeView(): string {
   const recent = documents[0];
-  return shell(`<main id="main" class="home-main">
+  return shell(`<main id="main" class="home-main" tabindex="-1">
     <section class="hero-copy" aria-labelledby="page-title">
       <div class="eyebrow"><span class="station-dot"></span> One paragraph. One place.</div>
       <h1 id="page-title">Finish reading<br><span>without losing your place.</span></h1>
@@ -110,8 +113,7 @@ function homeView(): string {
           <button class="primary-button" type="submit">Start at the first paragraph ${icon('arrow-right')}</button>
         </form>
         <div class="or-divider"><span>or</span></div>
-        <label class="file-button" for="epub-file"><span><strong>Open an EPUB</strong><small>Text-only extraction, up to 25 MB</small></span><span aria-hidden="true">.epub</span></label>
-        <input class="visually-hidden" id="epub-file" type="file" accept=".epub,application/epub+zip">
+        <label class="file-button"><span><strong>Open an EPUB</strong><small>Text-only extraction, up to 25 MB</small></span><span aria-hidden="true">.epub</span><input class="visually-hidden" id="epub-file" type="file" accept=".epub,application/epub+zip"></label>
         <p class="form-status ${statusKind}" role="status" aria-live="polite">${escapeHtml(statusMessage)}</p>
       </div>
     </section>
@@ -136,7 +138,7 @@ function readerView(): string {
   const percentage = Math.round(((index + 1) / current.paragraphs.length) * 100);
   const notes = current.notes.filter((note) => note.paragraph === index);
   const time = `${String(Math.floor(sprintSeconds / 60)).padStart(2, '0')}:${String(sprintSeconds % 60).padStart(2, '0')}`;
-  return shell(`<main id="main" class="reader-main">
+  return shell(`<main id="main" class="reader-main" tabindex="-1">
     <div class="reader-topline">
       <button class="back-button" data-shelf>${icon('arrow-left')} Shelf</button>
       <div class="document-identity"><span>Reading now</span><h1 class="sr-only">Reading Sprint Rail</h1><h2>${escapeHtml(current.title)}</h2></div>
@@ -162,15 +164,15 @@ function readerView(): string {
 }
 
 function shelfView(): string {
-  return shell(`<main id="main" class="shelf-main"><div class="shelf-heading"><div><span class="eyebrow"><span class="station-dot"></span> Your routes</span><h1>Return without searching.</h1><p>Every route remembers its paragraph and attached notes on this device.</p></div><button class="primary-button" data-new-route>New reading route</button></div>
+  return shell(`<main id="main" class="shelf-main" tabindex="-1"><div class="shelf-heading"><div><span class="eyebrow"><span class="station-dot"></span> Your routes</span><h1>Return without searching.</h1><p>Every route remembers its paragraph and attached notes on this device.</p></div><button class="primary-button" data-new-route>New reading route</button></div>
     ${documents.length ? `<ul class="document-list">${documents.map((doc) => { const pct = Math.round(((doc.currentIndex + 1) / doc.paragraphs.length) * 100); return `<li><button class="document-open" data-open-doc="${doc.id}"><span class="doc-source">${doc.source === 'epub' ? 'EPUB' : 'PASTED TEXT'}</span><strong>${escapeHtml(doc.title)}</strong><span>Stop ${doc.currentIndex + 1} of ${doc.paragraphs.length} · ${doc.notes.length} ${doc.notes.length === 1 ? 'note' : 'notes'}</span><i><b style="width:${pct}%"></b></i></button><button class="delete-doc" data-delete-doc="${doc.id}" aria-label="Delete ${escapeHtml(doc.title)}">Delete</button></li>`; }).join('')}</ul>` : `<div class="empty-state"><span>${icon('route')}</span><h2>No routes yet</h2><p>Paste an article or open an EPUB to create your first bounded reading rail.</p><button class="primary-button" data-new-route>Create a route</button></div>`}
-    <section class="data-tools" aria-labelledby="data-title"><div><h2 id="data-title">Your data, in your hands</h2><p>Export documents, reading positions, and notes as JSON, or restore them on another device.</p></div><div><button class="outline-button" data-export>Export data</button><label class="outline-button" for="import-data">Import data</label><input class="visually-hidden" id="import-data" type="file" accept="application/json,.json"></div></section>
+    <section class="data-tools" aria-labelledby="data-title"><div><h2 id="data-title">Your data, in your hands</h2><p>Export documents, reading positions, and notes as JSON, or restore them on another device.</p></div><div><button class="outline-button" data-export>Export data</button><label class="outline-button">Import data<input class="visually-hidden" id="import-data" type="file" accept="application/json,.json"></label></div></section>
   </main>`);
 }
 
 function legalView(kind: 'privacy' | 'terms'): string {
-  const privacy = `<main id="main" class="legal-main"><div class="eyebrow">Plain-language policy · 28 August 2026</div><h1>Privacy is the default.</h1><p class="lede">Reading Sprint Rail does not need an account and does not send your documents, notes, positions, or settings to us.</p><h2>What stays on your device</h2><p>Imported text, extracted EPUB text, reading positions, notes, and preferences are stored in your browser using IndexedDB and local storage. You can export or delete them from the Shelf. Clearing site data also removes them.</p><h2>Network and measurement</h2><p>The installed app works offline after its first load. We include no advertising, behavioral analytics, third-party fonts, tracking pixels, or social SDKs. The hosting platform may retain short-lived security logs and a privacy-respecting aggregate page count.</p><h2>Your choices</h2><p>Use “Export data” before moving browsers. Use each document’s Delete control or clear this site’s browser storage to erase local data. Questions can be sent to <a href="mailto:privacy@sociobot.in">privacy@sociobot.in</a>.</p></main>`;
-  const terms = `<main id="main" class="legal-main"><div class="eyebrow">Fair-use terms · 28 August 2026</div><h1>Terms for a quiet reading tool.</h1><p class="lede">Reading Sprint Rail is a personal reading utility, not a medical device, diagnostic service, or promise of a particular outcome.</p><h2>Using the product</h2><p>You may use the app to read material you are permitted to access. You remain responsible for copyright and for any text or EPUB you import. The app extracts text locally and does not bypass access controls.</p><h2>Availability and warranty</h2><p>The product is provided “as is” without guarantees of uninterrupted availability or fitness for a particular purpose. Keep exports of anything important. To the extent allowed by law, liability is limited to the amount you paid for the product.</p><h2>Changes and contact</h2><p>Questions about these terms can be sent to <a href="mailto:support@sociobot.in">support@sociobot.in</a>.</p></main>`;
+  const privacy = `<main id="main" class="legal-main" tabindex="-1"><div class="eyebrow">Plain-language policy · 28 August 2026</div><h1 tabindex="-1">Privacy is the default.</h1><p class="lede">Reading Sprint Rail does not need an account and does not send your documents, notes, positions, or settings to us.</p><h2>What stays on your device</h2><p>Imported text, extracted EPUB text, reading positions, notes, and preferences are stored in your browser using IndexedDB and local storage. You can export or delete them from the Shelf. Clearing site data also removes them.</p><h2>Network and measurement</h2><p>The installed app works offline after its first load. It loads no tracking or third-party runtime assets while you read and save notes.</p><h2>Your choices</h2><p>Use “Export data” before moving browsers. Use each document’s Delete control or clear this site’s browser storage to erase local data. Questions can be sent to <a href="mailto:privacy@sociobot.in">privacy@sociobot.in</a>.</p></main>`;
+  const terms = `<main id="main" class="legal-main" tabindex="-1"><div class="eyebrow">Fair-use terms · 28 August 2026</div><h1 tabindex="-1">Terms for a quiet reading tool.</h1><p class="lede">Reading Sprint Rail is a personal reading utility, not a medical device, diagnostic service, or promise of a particular outcome.</p><h2>Using the product</h2><p>You may use the app to read material you are permitted to access. You remain responsible for copyright and for any text or EPUB you import. The app extracts text locally and does not bypass access controls.</p><h2>Availability and warranty</h2><p>The product is provided “as is” without guarantees of uninterrupted availability or fitness for a particular purpose. Keep exports of anything important. To the extent allowed by law, liability is limited to the amount you paid for the product.</p><h2>Changes and contact</h2><p>Questions about these terms can be sent to <a href="mailto:support@sociobot.in">support@sociobot.in</a>.</p></main>`;
   return shell(kind === 'privacy' ? privacy : terms, 'legal');
 }
 
@@ -200,15 +202,51 @@ function render(): void {
   else if (activeView === 'reader') { document.title = demoMode ? 'Demo — Reading Sprint Rail' : 'Reading Sprint Rail — keep your place'; app.innerHTML = readerView(); }
   else if (activeView === 'shelf') { document.title = 'Shelf — Reading Sprint Rail'; app.innerHTML = shelfView(); }
   else { document.title = 'Reading Sprint Rail — keep your place'; app.innerHTML = homeView(); }
-  applySettings(); bindEvents(); updateConnection();
+  updateRouteMetadata(); applySettings(); bindEvents(); updateConnection();
+  if (shouldFocusRouteHeading) {
+    shouldFocusRouteHeading = false;
+    requestAnimationFrame(() => {
+      const heading = document.querySelector<HTMLElement>('main h1');
+      if (heading) { heading.tabIndex = -1; heading.focus(); }
+      const announcer = document.querySelector<HTMLElement>('#route-announcer');
+      if (announcer) announcer.textContent = document.title;
+    });
+  }
 }
 
 function notFoundView(): string {
-  return shell('<main id="main" class="legal-main"><div class="eyebrow">Wrong stop</div><h1>This route does not exist.</h1><p class="lede">Return to the reader and open a route that is ready for you.</p><p><a class="primary-button" href="/">Open the reader</a></p></main>', 'legal');
+  return shell('<main id="main" class="legal-main" tabindex="-1"><div class="eyebrow">Wrong stop</div><h1 tabindex="-1">This route does not exist.</h1><p class="lede">Return to the reader and open a route that is ready for you.</p><p><a class="primary-button" href="/">Open the reader</a></p></main>', 'legal');
 }
 
 function setStatus(message: string, kind: 'ok' | 'error' = 'ok'): void { statusMessage = message; statusKind = kind; render(); }
 function toast(message: string): void { const el = document.querySelector<HTMLElement>('[data-toast]'); if (!el) return; el.textContent = message; el.hidden = false; window.setTimeout(() => { el.hidden = true; }, 4200); }
+
+function navigate(path: string, view?: typeof activeView): void {
+  history.pushState({}, '', path);
+  if (view) activeView = view;
+  shouldFocusRouteHeading = true;
+  render();
+  window.scrollTo(0, 0);
+}
+
+function updateRouteMetadata(): void {
+  const path = location.pathname.replace(/\/$/, '') || '/';
+  const descriptions: Record<string, string> = {
+    '/': 'A quiet, offline reading rail for finishing one paragraph at a time and keeping notes in place.',
+    '/demo': 'Try Reading Sprint Rail with a three-stop sample reading route.',
+    '/privacy': 'How Reading Sprint Rail keeps documents, notes, and settings on your device.',
+    '/terms': 'Terms for using Reading Sprint Rail, a personal local reading utility.',
+  };
+  const canonicalPath = Object.hasOwn(descriptions, path) ? path : '/';
+  const canonical = `https://reading-sprint-rail.sociobot.in${canonicalPath}`;
+  document.querySelector<HTMLLinkElement>('link[rel="canonical"]')!.href = canonical;
+  document.querySelector<HTMLMetaElement>('meta[name="description"]')!.content = descriptions[canonicalPath];
+  document.querySelector<HTMLMetaElement>('meta[property="og:title"]')!.content = document.title;
+  document.querySelector<HTMLMetaElement>('meta[property="og:description"]')!.content = descriptions[canonicalPath];
+  document.querySelector<HTMLMetaElement>('meta[property="og:url"]')!.content = canonical;
+  document.querySelector<HTMLMetaElement>('meta[name="twitter:title"]')!.content = document.title;
+  document.querySelector<HTMLMetaElement>('meta[name="twitter:description"]')!.content = descriptions[canonicalPath];
+}
 
 async function createDocument(title: string, paragraphs: string[], source: 'paste' | 'epub'): Promise<void> {
   const now = Date.now();
@@ -264,9 +302,9 @@ function toggleSprint(): void {
 function pauseSprint(): void { sprintRunning = false; if (sprintTimer) window.clearInterval(sprintTimer); sprintTimer = null; }
 
 function bindEvents(): void {
-  document.querySelectorAll<HTMLElement>('[data-route]').forEach((link) => link.addEventListener('click', (event) => { event.preventDefault(); history.pushState({}, '', (link as HTMLAnchorElement).href); render(); window.scrollTo(0, 0); }));
-  document.querySelectorAll<HTMLElement>('[data-home]').forEach((el) => el.addEventListener('click', (event) => { event.preventDefault(); history.pushState({}, '', demoMode ? '/demo' : '/'); activeView = 'home'; render(); }));
-  document.querySelectorAll<HTMLElement>('[data-shelf]').forEach((el) => el.addEventListener('click', () => { history.pushState({}, '', demoMode ? '/demo' : '/'); activeView = 'shelf'; render(); }));
+  document.querySelectorAll<HTMLElement>('[data-route]').forEach((link) => link.addEventListener('click', (event) => { event.preventDefault(); navigate((link as HTMLAnchorElement).pathname); }));
+  document.querySelectorAll<HTMLElement>('[data-home]').forEach((el) => el.addEventListener('click', (event) => { event.preventDefault(); navigate(demoMode ? '/demo' : '/', 'home'); }));
+  document.querySelectorAll<HTMLElement>('[data-shelf]').forEach((el) => el.addEventListener('click', () => navigate(demoMode ? '/demo' : '/', 'shelf')));
   document.querySelectorAll<HTMLElement>('[data-new-route]').forEach((el) => el.addEventListener('click', () => { activeView = 'home'; statusMessage = ''; render(); }));
   document.querySelectorAll<HTMLElement>('[data-open-doc]').forEach((el) => el.addEventListener('click', () => { current = documents.find((doc) => doc.id === el.dataset.openDoc) || null; activeView = current ? 'reader' : 'home'; render(); }));
   document.querySelector('[data-reset-demo]')?.addEventListener('click', async () => { await clearDocuments(); localStorage.removeItem('demo:rsr:settings'); location.assign('/demo'); });
@@ -296,7 +334,7 @@ function bindEvents(): void {
   document.querySelectorAll<HTMLButtonElement>('[data-delete-doc]').forEach((button) => button.addEventListener('click', async () => { const doc = documents.find((item) => item.id === button.dataset.deleteDoc); if (!doc || !confirm(`Delete “${doc.title}” and its notes from this device?`)) return; await deleteDocument(doc.id); documents = await listDocuments(); if (current?.id === doc.id) current = null; render(); toast('Reading route deleted.'); }));
 
   document.querySelector('[data-export]')?.addEventListener('click', () => { const blob = new Blob([JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), documents, settings }, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = `reading-sprint-rail-${new Date().toISOString().slice(0, 10)}.json`; link.click(); URL.revokeObjectURL(url); toast('Data export downloaded.'); });
-  document.querySelector<HTMLInputElement>('#import-data')?.addEventListener('change', async (event) => { const file = (event.currentTarget as HTMLInputElement).files?.[0]; if (!file) return; try { const data = JSON.parse(await file.text()); if (!Array.isArray(data.documents) || data.version !== 1) throw new Error(); if (!confirm(`Replace this device’s shelf with ${data.documents.length} imported routes?`)) return; await replaceAllDocuments(data.documents); documents = await listDocuments(); if (data.settings) settings = { ...DEFAULT_SETTINGS, ...data.settings }; applySettings(); render(); toast('Shelf restored from export.'); } catch { toast('That file is not a valid Reading Sprint Rail export.'); } });
+  document.querySelector<HTMLInputElement>('#import-data')?.addEventListener('change', async (event) => { const file = (event.currentTarget as HTMLInputElement).files?.[0]; if (!file) return; try { const data = parseReadingSprintRailExport(JSON.parse(await file.text())); if (!data) throw new Error(); if (!confirm(`Replace this device’s shelf with ${data.documents.length} imported routes?`)) return; await replaceAllDocuments(data.documents); documents = await listDocuments(); settings = data.settings; applySettings(); render(); toast('Shelf restored from export.'); } catch { toast('That file is not a valid Reading Sprint Rail export.'); } });
 
   const settingsDialog = document.querySelector<HTMLDialogElement>('#settings-dialog');
   document.querySelector('[data-settings]')?.addEventListener('click', () => { if (!settingsDialog) return; const form = settingsDialog.querySelector<HTMLFormElement>('form')!; (form.elements.namedItem('font') as HTMLSelectElement).value = settings.font; (form.elements.namedItem('theme') as RadioNodeList).value = settings.theme; (form.elements.namedItem('sprintMinutes') as HTMLSelectElement).value = String(settings.sprintMinutes); (form.elements.namedItem('breakMinutes') as HTMLSelectElement).value = String(settings.breakMinutes); (form.elements.namedItem('wpm') as HTMLSelectElement).value = String(settings.wpm); settingsDialog.showModal(); });
@@ -328,7 +366,7 @@ async function registerServiceWorker(): Promise<void> {
 
 async function init(): Promise<void> {
   applySettings();
-  try { documents = await listDocuments(); } catch { statusMessage = 'Local storage is unavailable. You can read now, but this browser may not save your place.'; statusKind = 'error'; }
+  try { const stored = await listDocumentsWithRecovery(); documents = stored.documents; if (stored.discarded) { statusMessage = `Removed ${stored.discarded} corrupted reading route${stored.discarded === 1 ? '' : 's'} to keep this shelf usable.`; statusKind = 'error'; } } catch { statusMessage = 'Local storage is unavailable. You can read now, but this browser may not save your place.'; statusKind = 'error'; }
   await seedDemo();
   const latest = documents[0]; if (latest) current = latest;
   if (demoMode && current) activeView = 'reader';
@@ -336,5 +374,6 @@ async function init(): Promise<void> {
   void registerServiceWorker();
 }
 
-window.addEventListener('online', updateConnection); window.addEventListener('offline', updateConnection); window.addEventListener('popstate', render); window.addEventListener('keydown', keyboardNavigation);
+document.querySelector('.skip-link')?.addEventListener('click', (event) => { event.preventDefault(); const main = document.querySelector<HTMLElement>('#main'); main?.focus(); main?.scrollIntoView(); });
+window.addEventListener('online', updateConnection); window.addEventListener('offline', updateConnection); window.addEventListener('popstate', () => { shouldFocusRouteHeading = true; render(); }); window.addEventListener('keydown', keyboardNavigation);
 void init();

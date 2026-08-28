@@ -7,6 +7,17 @@
     <meta name="description" content="A quiet, offline reading rail for finishing one paragraph at a time and keeping notes in place." />
     <meta name="color-scheme" content="light dark" />
     <link rel="canonical" href="https://reading-sprint-rail.sociobot.in/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Reading Sprint Rail — keep your place" />
+    <meta property="og:description" content="A quiet, offline reading rail for finishing one paragraph at a time and keeping notes in place." />
+    <meta property="og:url" content="https://reading-sprint-rail.sociobot.in/" />
+    <meta property="og:image" content="https://reading-sprint-rail.sociobot.in/assets/social-card.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Reading Sprint Rail — keep your place" />
+    <meta name="twitter:description" content="A quiet, offline reading rail for finishing one paragraph at a time and keeping notes in place." />
+    <meta name="twitter:image" content="https://reading-sprint-rail.sociobot.in/assets/social-card.png" />
     <link rel="preload" href="/assets/atkinson-400.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/assets/atkinson-700.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="manifest" href="/manifest.webmanifest" />
@@ -16,6 +27,7 @@
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to reading tools</a>
+    <div id="route-announcer" class="sr-only" aria-live="polite" aria-atomic="true"></div>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

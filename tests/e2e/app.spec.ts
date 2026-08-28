@@ -53,7 +53,7 @@ test('@claim:demo-isolation keeps demo changes out of real storage and discards 
   expect(namespaces).toEqual({ real: 0, demo: 0 });
 });
 
-test('@claim:local-reading-data sends no reading data off-origin', async ({ page }) => {
+test('@claim:local-reading-data keeps reading local with no account, upload, tracking, or third-party runtime requests', async ({ page }) => {
   const requests: string[] = [];
   page.on('request', (request) => requests.push(request.url()));
   await page.goto('/demo');
@@ -62,6 +62,8 @@ test('@claim:local-reading-data sends no reading data off-origin', async ({ page
   await page.getByRole('button', { name: 'Save note' }).click();
   await expect(page.getByText('Saved locally.')).toBeVisible();
   expect(requests.every((url) => new URL(url).origin === new URL(page.url()).origin)).toBe(true);
+  expect(requests).toHaveLength(requests.filter((url) => new URL(url).origin === new URL(page.url()).origin).length);
+  expect(page.locator('input[type="password"], [name*="email" i], [name*="password" i]')).toHaveCount(0);
 });
 
 test('@claim:offline-reading reloads the seeded demo after the first visit', async ({ page, context }) => {
@@ -76,24 +78,112 @@ test('@claim:offline-reading reloads the seeded demo after the first visit', asy
   await expect(page.getByText('Stop 1 of 3')).toBeVisible();
 });
 
-test('@claim:json-export includes the current document, position, notes, and settings', async ({ page }) => {
+test('@claim:json-export restores documents, reading position, notes, and settings after they are changed', async ({ page }) => {
   await page.goto('/demo');
-  await page.getByRole('button', { name: 'Shelf', exact: true }).click();
+  await page.getByRole('button', { name: /One stop ahead/ }).click();
+  await expect(page.getByText('Stop 2 of 3')).toBeVisible();
+  await page.getByRole('button', { name: 'Reading settings' }).click();
+  await page.locator('input[name="fontSize"]').fill('28');
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.locator('html')).toHaveCSS('--reader-size', '28px');
+  await page.locator('.quiet-button[data-shelf]').click();
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Export data' }).click();
   const download = await downloadPromise;
   const exported = JSON.parse(await readFile((await download.path())!, 'utf8')) as { version: number; documents: Array<{ title: string; currentIndex: number; notes: unknown[] }>; settings: unknown };
   expect(exported.version).toBe(1);
   expect(exported.documents).toHaveLength(1);
-  expect(exported.documents[0]).toMatchObject({ title: 'A three-stop reset between meetings', currentIndex: 0 });
+  expect(exported.documents[0]).toMatchObject({ title: 'A three-stop reset between meetings', currentIndex: 1 });
   expect(exported.documents[0].notes).toHaveLength(1);
   expect(exported.settings).toBeTruthy();
+  await page.locator('.document-open').click();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Delete note: A useful pause is small enough to keep.' }).click();
+  await expect(page.getByText('A useful pause is small enough to keep.')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Shelf', exact: true }).click();
+  await page.getByRole('button', { name: 'Reading settings' }).click();
+  await page.locator('input[name="fontSize"]').fill('22');
+  await page.getByRole('button', { name: 'Save settings' }).click();
   page.once('dialog', (dialog) => dialog.accept());
   await page.locator('#import-data').setInputFiles({ name: 'rail-export.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(exported)) });
   await expect(page.getByText('Shelf restored from export.')).toBeVisible();
+  await expect(page.locator('html')).toHaveCSS('--reader-size', '28px');
+  await page.locator('.document-open').click();
+  await expect(page.getByText('Stop 2 of 3')).toBeVisible();
+  await expect(page.getByText('A useful pause is small enough to keep.')).toBeVisible();
 });
 
-test('creates a route, moves by keyboard, attaches a note, and resumes', async ({ page }) => {
+test('@claim:location-notes saves and deletes a note at its paragraph', async ({ page }) => {
+  await page.getByLabel('Title').fill('Notes route');
+  await page.getByLabel('Article or chapter text').fill(passage);
+  await page.getByRole('button', { name: /Start at the first paragraph/ }).click();
+  await page.getByLabel('One-line note for paragraph 1').fill('A local marker.');
+  await page.getByRole('button', { name: 'Save note' }).click();
+  await expect(page.getByText('A local marker.')).toBeVisible();
+  page.once('dialog', (dialog) => dialog.accept());
+  await page.getByRole('button', { name: 'Delete note: A local marker.' }).click();
+  await expect(page.getByText('A local marker.')).toHaveCount(0);
+});
+
+test('rejects a structurally invalid import atomically and recovers corrupted stored routes on startup', async ({ page }) => {
+  await page.getByLabel('Title').fill('Safe route');
+  await page.getByLabel('Article or chapter text').fill(passage);
+  await page.getByRole('button', { name: /Start at the first paragraph/ }).click();
+  await page.getByRole('button', { name: 'Shelf', exact: true }).click();
+  const invalidExport = { version: 1, documents: [{ id: 'crafted', title: 'Crafted', source: 'paste', paragraphs: null, currentIndex: 0, notes: [], createdAt: 1, updatedAt: 1 }], settings: {} };
+  await page.locator('#import-data').setInputFiles({ name: 'invalid.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(invalidExport)) });
+  await expect(page.getByText('That file is not a valid Reading Sprint Rail export.')).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', { level: 1, name: 'Finish reading without losing your place.' })).toBeVisible();
+  await expect(page.getByText('Safe route')).toBeVisible();
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open('reading-sprint-rail');
+      request.onsuccess = () => { const tx = request.result.transaction('documents', 'readwrite'); tx.objectStore('documents').put({ id: 'corrupt', title: 'Bad route', source: 'paste', paragraphs: null, currentIndex: 0, notes: [], createdAt: 1, updatedAt: 1 }); tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); };
+      request.onerror = () => reject(request.error);
+    });
+  });
+  await page.reload();
+  await expect(page.getByText('Removed 1 corrupted reading route to keep this shelf usable.')).toBeVisible();
+  await expect(page.getByText('Safe route')).toBeVisible();
+  const corruptCount = await page.evaluate(async () => new Promise<number>((resolve) => {
+    const request = indexedDB.open('reading-sprint-rail');
+    request.onsuccess = () => { const tx = request.result.transaction('documents'); const get = tx.objectStore('documents').get('corrupt'); get.onsuccess = () => resolve(get.result ? 1 : 0); };
+  }));
+  expect(corruptCount).toBe(0);
+});
+
+test('file imports keep a visible proxy focus and mobile controls meet 44px targets', async ({ page }) => {
+  await page.locator('#epub-file').focus();
+  expect(await page.locator('.file-button').evaluate((element) => element.matches(':focus-within'))).toBe(true);
+  await expect(page.locator('.file-button')).toHaveCSS('outline-width', '3px');
+  await page.getByRole('button', { name: /^Shelf/ }).click();
+  await page.locator('#import-data').focus();
+  expect(await page.locator('label.outline-button').evaluate((element) => element.matches(':focus-within'))).toBe(true);
+  await expect(page.locator('label.outline-button')).toHaveCSS('outline-width', '3px');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/demo');
+  const targets = await page.locator('.demo-control, .back-button, .site-footer a').evaluateAll((elements) => elements.map((element) => {
+    const box = element.getBoundingClientRect(); return { width: box.width, height: box.height };
+  }));
+  expect(targets.length).toBeGreaterThan(3);
+  expect(targets.every((target) => target.width >= 44 && target.height >= 44)).toBe(true);
+});
+
+test('SPA navigation focuses and announces its h1, and supplies route-specific social metadata', async ({ page }) => {
+  await page.getByRole('link', { name: 'Privacy' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Privacy is the default.' })).toBeFocused();
+  await expect(page.locator('#route-announcer')).toHaveText('Privacy — Reading Sprint Rail');
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://reading-sprint-rail.sociobot.in/privacy');
+  await expect(page.locator('meta[property="og:image"]')).toHaveAttribute('content', /assets\/social-card\.png$/);
+  await page.goBack();
+  await expect(page.getByRole('heading', { level: 1, name: 'Finish reading without losing your place.' })).toBeFocused();
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://reading-sprint-rail.sociobot.in/');
+  await page.goto('/demo');
+  await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://reading-sprint-rail.sociobot.in/demo');
+});
+
+test('@claim:keyboard-controls moves a route with Left/Right and focuses notes with N', async ({ page }) => {
   await expect(page.locator('h1')).toHaveCount(1);
   await page.getByLabel('Title').fill('A bounded test');
   await page.getByLabel('Article or chapter text').fill(passage);
@@ -102,6 +192,8 @@ test('creates a route, moves by keyboard, attaches a note, and resumes', async (
   await page.locator('.current-stop').focus();
   await page.keyboard.press('ArrowRight');
   await expect(page.getByText('Stop 2 of 3')).toBeVisible();
+  await page.keyboard.press('N');
+  await expect(page.getByLabel('One-line note for paragraph 2')).toBeFocused();
   await page.getByLabel('One-line note for paragraph 2').fill('Return to this idea.');
   await page.getByRole('button', { name: 'Save note' }).click();
   await expect(page.getByText('Return to this idea.')).toBeVisible();
@@ -110,19 +202,31 @@ test('creates a route, moves by keyboard, attaches a note, and resumes', async (
   await expect(page.getByText('Stop 2 of 3 · 1 note')).toBeVisible();
 });
 
-test('reading preferences change the rail and persist', async ({ page }) => {
+test('@claim:reading-preferences saves adjustable reading presentation and pace', async ({ page }) => {
   await page.getByLabel('Title').fill('Settings test');
   await page.getByLabel('Article or chapter text').fill(passage);
   await page.getByRole('button', { name: /Start at the first paragraph/ }).click();
   await page.getByRole('button', { name: 'Reading settings' }).click();
+  await page.locator('select[name="font"]').selectOption('serif');
   await page.locator('input[name="fontSize"]').fill('28');
+  await page.locator('input[name="lineHeight"]').fill('1.8');
+  await page.locator('select[name="sprintMinutes"]').selectOption('25');
+  await page.locator('select[name="breakMinutes"]').selectOption('10');
+  await page.locator('select[name="wpm"]').selectOption('240');
+  await page.locator('input[name="theme"][value="dark"]').check();
   await page.getByText('Word cue', { exact: true }).click();
+  await page.getByText('High contrast', { exact: true }).click();
+  await page.getByText('Reduce motion', { exact: true }).click();
   await page.getByRole('button', { name: 'Save settings' }).click();
   await expect(page.locator('html')).toHaveCSS('--reader-size', '28px');
+  await expect(page.locator('html')).toHaveAttribute('data-reader-font', 'serif');
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.locator('html')).toHaveAttribute('data-contrast', 'true');
+  await expect(page.locator('html')).toHaveAttribute('data-motion', 'reduced');
   await expect(page.getByRole('button', { name: 'Run word cue' })).toBeVisible();
 });
 
-test('opens a valid EPUB into a reading route', async ({ page }) => {
+test('@claim:epub-local-extraction opens a standard EPUB into a local reading route', async ({ page }) => {
   const JSZip = (await import('jszip')).default;
   const zip = new JSZip();
   zip.file('mimetype', 'application/epub+zip');

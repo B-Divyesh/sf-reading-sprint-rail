@@ -57,6 +57,7 @@ Paragraph transitions use 180ms opacity plus an 8px horizontal translation match
 - Negative list: no people, hands, books with legible text, letters, words, logos, UI screenshot, watermark, gradients, neon, medical symbols, branded objects.
 - Exact prompt is stored in `assets/src/rail-landscape.json`.
 - Generator: OpenAI image model via Azure AI Foundry, deployment `factory-image`; generated 2026-08-28. Original asset for this product. The shipped WebP is optimized to ≤300 KB.
+- `public/assets/social-card.png` is a 1200 × 630 crop derived from that original hero asset for Open Graph and Twitter previews; it contains no added text or third-party imagery.
 
 ### Authored assets
 

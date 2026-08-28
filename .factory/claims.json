@@ -15,7 +15,7 @@
   },
   {
     "id": "local-reading-data",
-    "claim": "Reading data stays in this browser.",
+    "claim": "Reading data stays in this browser; no account, cloud upload, tracking, or third-party runtime request is needed to read and save a note.",
     "where": "Home facts, import guidance, README, Privacy",
     "test": "npm run test:e2e -- --grep @claim:local-reading-data",
     "sandbox": "Fresh demo flow intercepts every request and confirms only same-origin app assets are requested while a note is saved."
@@ -32,6 +32,34 @@
     "claim": "Exports and restores documents, reading positions, notes, and preferences as JSON.",
     "where": "Shelf, README",
     "test": "npm run test:e2e -- --grep @claim:json-export",
-    "sandbox": "Fresh demo shelf downloads JSON, asserts version, document, position, note, and settings fields, then restores that file."
+    "sandbox": "Fresh demo changes position and settings, downloads JSON, removes a note and changes settings, then restores and asserts the original document, position, note, and settings."
+  },
+  {
+    "id": "epub-local-extraction",
+    "claim": "Opens readable text from a standard EPUB in this browser.",
+    "where": "README, import control, Privacy",
+    "test": "npm run test:e2e -- --grep @claim:epub-local-extraction",
+    "sandbox": "Fresh browser imports a generated standard EPUB and asserts its text opens as a reading route."
+  },
+  {
+    "id": "keyboard-controls",
+    "claim": "Left and right arrows move one stop; N focuses the note field.",
+    "where": "README, reader hint",
+    "test": "npm run test:e2e -- --grep @claim:keyboard-controls",
+    "sandbox": "Fresh browser creates a three-stop route, uses ArrowRight, then presses N and asserts note-field focus."
+  },
+  {
+    "id": "reading-preferences",
+    "claim": "Lets you save reading type, size, spacing, theme, contrast, motion, sprint, break, and word-cue preferences.",
+    "where": "README, settings dialog",
+    "test": "npm run test:e2e -- --grep @claim:reading-preferences",
+    "sandbox": "Fresh browser changes the listed settings and asserts the applied reader state after saving."
+  },
+  {
+    "id": "location-notes",
+    "claim": "Saves and deletes one-line notes at the current stop.",
+    "where": "README, reader notes",
+    "test": "npm run test:e2e -- --grep @claim:location-notes",
+    "sandbox": "Fresh browser saves a note at stop one, then deletes it after explicit confirmation."
   }
 ]
