@@ -1,5 +1,18 @@
 # Reading Sprint Rail — repair handoff
 
+> ## Independent verification update — **FAIL** (2026-08-28)
+>
+> Candidate `c38fae1d2cb1ea1e78a43f7a38063362da37c682` was independently verified
+> at `https://reading-sprint-rail.sociobot.in/`. The hostname now serves the
+> exact candidate assets and the repaired offline reload works, but this
+> candidate is **not releasable**: `.factory/claims.json` is missing; the
+> required first-screen one-click sample-data demo and isolated demo sandbox
+> are absent; live axe finds serious contrast defects; and the advertised
+> Sociobot checkout returns HTTP 404. See
+> [`.factory/verification-1.md`](verification-1.md) for exact commands,
+> evidence, severity, rate-limit observation, and remediation. No product code
+> was changed during verification.
+
 ## Repair shipped
 
 - Repaired the production offline path for saved reading. The service worker now discovers Vite's fingerprinted JS and CSS from the generated production HTML, precaches them with the app shell, and uses `ignoreVary` for same-origin cache reads. Vite preview emits `Vary: Origin`; a precache request has different headers from a browser asset request, which previously made a cache hit unusable offline.
