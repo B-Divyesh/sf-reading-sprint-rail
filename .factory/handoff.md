@@ -2,7 +2,7 @@
 
 ## Release repair complete
 
-Repair commit: `76ce92a fix: add isolated demo and release QA repairs`.
+Repair commits: `76ce92a fix: add isolated demo and release QA repairs`; `f46e294 fix: enforce manifest and 404 host policy`.
 
 - Added `/demo` and the first-screen **Try it with sample data** action. It opens a realistic three-stop reading sample immediately, includes a location-linked sample note, and has a persistent **Demo — sample data, nothing is saved** banner with Reset demo and Start for real controls.
 - Demo data is stored only in IndexedDB `demo:reading-sprint-rail`; demo preferences use `demo:` local-storage keys. Start for real clears the demo namespace before opening the real reader.
