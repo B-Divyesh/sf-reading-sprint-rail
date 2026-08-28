@@ -122,8 +122,12 @@ test('@claim:json-export restores documents, reading position, notes, and settin
   await page.getByRole('button', { name: 'Reading settings' }).click();
   await page.locator('input[name="fontSize"]').fill('22');
   await page.getByRole('button', { name: 'Save settings' }).click();
-  page.once('dialog', (dialog) => dialog.accept());
+  // Register and await the replacement confirmation before asserting the
+  // observable restore result. A fire-and-forget dialog handler could leave
+  // this test racing the async file-change/import transaction in a full run.
+  const importConfirmation = page.waitForEvent('dialog');
   await page.locator('#import-data').setInputFiles({ name: 'rail-export.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(exported)) });
+  await (await importConfirmation).accept();
   await expect(page.getByText('Shelf restored from export.')).toBeVisible();
   await expect(page.locator('html')).toHaveCSS('--reader-size', '28px');
   await page.locator('.document-open').click();
@@ -218,6 +222,42 @@ test('@claim:keyboard-controls moves a route with Left/Right and focuses notes w
   await page.reload();
   await page.getByRole('button', { name: /Shelf/ }).first().click();
   await expect(page.getByText('Stop 2 of 3 · 1 note')).toBeVisible();
+});
+
+test('@claim:shelf-resume reopens the last saved paragraph and its note from the local shelf', async ({ page }) => {
+  await page.getByLabel('Title').fill('Resume route');
+  await page.getByLabel('Article or chapter text').fill(passage);
+  await page.getByRole('button', { name: /Start at the first paragraph/ }).click();
+  await page.getByRole('button', { name: /One stop ahead/ }).click();
+  await page.getByLabel('One-line note for paragraph 2').fill('Resume from this marker.');
+  await page.getByRole('button', { name: 'Save note' }).click();
+  await page.reload();
+  await page.getByRole('button', { name: /^Shelf/ }).click();
+  await expect(page.getByText('Resume route')).toBeVisible();
+  await expect(page.getByText('Stop 2 of 3 · 1 note')).toBeVisible();
+  await page.locator('.document-open').filter({ hasText: 'Resume route' }).click();
+  await expect(page.getByText('Stop 2 of 3')).toBeVisible();
+  await expect(page.getByText('Resume from this marker.')).toBeVisible();
+});
+
+test('@claim:pwa-install provides a standalone manifest and an active service worker', async ({ page }) => {
+  await page.goto('/demo');
+  const manifest = await page.evaluate(async () => {
+    const href = document.querySelector<HTMLLinkElement>('link[rel="manifest"]')?.href;
+    if (!href) return null;
+    const response = await fetch(href);
+    return response.ok ? response.json() : null;
+  }) as { display: string; start_url: string; icons: Array<{ sizes: string; purpose?: string }> } | null;
+  expect(manifest).toMatchObject({ display: 'standalone', start_url: '/?source=installed-v2' });
+  expect(manifest?.icons).toEqual(expect.arrayContaining([
+    expect.objectContaining({ sizes: '192x192' }),
+    expect.objectContaining({ sizes: '512x512' }),
+    expect.objectContaining({ sizes: '512x512', purpose: 'maskable' }),
+  ]));
+  await page.waitForFunction(async () => {
+    await navigator.serviceWorker.ready;
+    return navigator.serviceWorker.controller?.state === 'activated';
+  });
 });
 
 test('@claim:reading-preferences saves adjustable reading presentation and pace', async ({ page }) => {

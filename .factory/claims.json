@@ -49,6 +49,20 @@
     "sandbox": "Fresh browser creates a three-stop route, uses ArrowRight, then presses N and asserts note-field focus."
   },
   {
+    "id": "shelf-resume",
+    "claim": "Resumes the last paragraph and its note from a local document shelf.",
+    "where": "README",
+    "test": "npm run test:e2e -- --grep @claim:shelf-resume",
+    "sandbox": "Fresh browser creates a three-stop route, saves a note at stop two, reloads, then opens the shelf and reopens the saved stop and note."
+  },
+  {
+    "id": "pwa-install",
+    "claim": "Can be installed as a standalone PWA.",
+    "where": "README",
+    "test": "npm run test:e2e -- --grep @claim:pwa-install",
+    "sandbox": "Fresh demo visit fetches the shipped manifest, asserts standalone display plus 192, 512, and maskable icons, then waits for the active service worker."
+  },
+  {
     "id": "reading-preferences",
     "claim": "Lets you save reading type, size, spacing, theme, contrast, motion, sprint, break, and word-cue preferences.",
     "where": "README, settings dialog",
