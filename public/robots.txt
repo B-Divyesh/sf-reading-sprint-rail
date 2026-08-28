@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://reading-sprint-rail.sociobot.in/sitemap.xml
