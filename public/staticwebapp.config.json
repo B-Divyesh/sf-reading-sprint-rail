@@ -16,9 +16,8 @@
     },
     { "route": "/sw.js", "headers": { "Cache-Control": "no-cache" } }
   ],
-  "navigationFallback": {
-    "rewrite": "/404.html",
-    "exclude": ["/assets/*", "/*.{css,js,png,jpg,svg,webp,ico,woff2,json,txt,xml,wasm}"]
+  "mimeTypes": {
+    ".webmanifest": "application/manifest+json"
   },
   "globalHeaders": {
     "Content-Security-Policy": "default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self'; img-src 'self' data: blob:; manifest-src 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self'; frame-ancestors 'none'; upgrade-insecure-requests",
