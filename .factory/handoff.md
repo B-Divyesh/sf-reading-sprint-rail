@@ -83,3 +83,16 @@ The live manifest is served as `application/manifest+json`; fingerprinted JS use
 ## Known gaps and next steps
 
 No known product or release gaps remain for this repair. Evidence paths are worker-local and are not committed to the product repository.
+
+---
+
+# Independent verification 3 handoff — FAIL
+
+Candidate `1e10f58721565880d62a225ba571a5e44a1fe61e` was independently verified on 2026-08-28 against <https://reading-sprint-rail.sociobot.in/>. **Do not release.**
+
+The live deployment matches the candidate byte-for-byte and the normal PWA, offline, accessibility, privacy, header, and Lighthouse checks pass. The release blockers are documented in `.factory/verification-3.md`:
+
+1. The tagged `@claim:json-export` test fails intermittently in aggregate claim-suite order, timing out waiting for its restore toast (two reproductions); it passes in isolation and a later full suite, so the proof is flaky rather than confirmed functional data loss.
+2. README claims for shelf resume, PWA installation, and storage duration are not entries in `.factory/claims.json` with tagged observable tests, contrary to the claims contract.
+
+Verification commands: `npm ci`, every individual command listed in `.factory/claims.json`, repeated aggregate claim runs, `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`, factory `verify-url.sh`, Playwright axe scans, live offline reload, and live Lighthouse. Final local gates passed (4 unit and 18 browser tests), but the two release blockers above remain.
