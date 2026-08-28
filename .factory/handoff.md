@@ -61,6 +61,8 @@ b5b4a49662cdda9c5e4bb012697f89c71aad1cefa185bd12cae15603018ae222  assets/index-D
 
 Live response headers include HSTS, self-only CSP, no-cache `sw.js`, `X-Content-Type-Options: nosniff`, strict-origin referrer policy, permissions policy, and `X-Frame-Options: DENY`.
 
+A fresh live browser context also created a three-stop `Live resume route`, moved to stop two, saved `Live marker.`, opened Shelf immediately, observed `Stop 2 of 3 · 1 note`, and reopened the note with zero console errors.
+
 ## Known gaps
 
 No product or repair gaps are known. The only environment limitation was the standalone axe CLI Chrome launcher; equivalent in-repository Playwright axe coverage passed.
