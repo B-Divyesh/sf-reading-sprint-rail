@@ -1,0 +1,37 @@
+[
+  {
+    "id": "sample-demo",
+    "claim": "Try it with sample data opens a three-stop reading rail right away.",
+    "where": "Home page action and demo banner",
+    "test": "npm run test:e2e -- --grep @claim:sample-demo",
+    "sandbox": "Fresh browser context opens /demo and asserts seeded sample content, three stops, and demo controls."
+  },
+  {
+    "id": "demo-isolation",
+    "claim": "Demo sample data is not saved with your reading data.",
+    "where": "Demo banner",
+    "test": "npm run test:e2e -- --grep @claim:demo-isolation",
+    "sandbox": "Fresh context writes demo data, starts for real, and asserts the real IndexedDB namespace is empty while the demo namespace is discarded."
+  },
+  {
+    "id": "local-reading-data",
+    "claim": "Reading data stays in this browser.",
+    "where": "Home facts, import guidance, README, Privacy",
+    "test": "npm run test:e2e -- --grep @claim:local-reading-data",
+    "sandbox": "Fresh demo flow intercepts every request and confirms only same-origin app assets are requested while a note is saved."
+  },
+  {
+    "id": "offline-reading",
+    "claim": "Continues offline after the first visit.",
+    "where": "Home facts, README, Privacy",
+    "test": "npm run test:e2e -- --grep @claim:offline-reading",
+    "sandbox": "Fresh demo visit waits for the active service worker, sets the context offline, reloads, and reads the seeded rail."
+  },
+  {
+    "id": "json-export",
+    "claim": "Exports and restores documents, reading positions, notes, and preferences as JSON.",
+    "where": "Shelf, README",
+    "test": "npm run test:e2e -- --grep @claim:json-export",
+    "sandbox": "Fresh demo shelf downloads JSON, asserts version, document, position, note, and settings fields, then restores that file."
+  }
+]

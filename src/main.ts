@@ -1,16 +1,16 @@
 import './styles.css';
-import { deleteDocument, listDocuments, replaceAllDocuments, saveDocument } from './db';
+import { clearDocuments, deleteDocument, listDocuments, replaceAllDocuments, saveDocument } from './db';
 import { parseEpub } from './epub';
-import { cachedUnlock, captureLicenseFromUrl, checkoutUrl, getLicense, storeLicense, verifyLicense } from './license';
-import { escapeHtml, normalizeParagraphs, readingMinutes } from './text';
+import { escapeHtml, normalizeParagraphs } from './text';
 import { DEFAULT_SETTINGS, type ReadingDocument, type Settings } from './types';
 
 const app = document.querySelector<HTMLDivElement>('#app')!;
 let documents: ReadingDocument[] = [];
 let current: ReadingDocument | null = null;
 let activeView: 'home' | 'reader' | 'shelf' = 'home';
+const demoMode = location.pathname === '/demo' || new URLSearchParams(location.search).get('demo') === '1';
+const storagePrefix = demoMode ? 'demo:' : '';
 let settings = loadSettings();
-let unlocked = cachedUnlock();
 let wordIndex = 0;
 let wordPlaying = false;
 let wordTimer: number | null = null;
@@ -22,7 +22,7 @@ let statusMessage = '';
 let statusKind: 'ok' | 'error' = 'ok';
 
 function loadSettings(): Settings {
-  try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem('rsr:settings') || '{}') }; }
+  try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem(`${storagePrefix}rsr:settings`) || '{}') }; }
   catch { return { ...DEFAULT_SETTINGS }; }
 }
 
@@ -34,7 +34,27 @@ function applySettings(): void {
   root.dataset.readerFont = settings.font;
   root.style.setProperty('--reader-size', `${settings.fontSize}px`);
   root.style.setProperty('--reader-leading', String(settings.lineHeight));
-  localStorage.setItem('rsr:settings', JSON.stringify(settings));
+  localStorage.setItem(`${storagePrefix}rsr:settings`, JSON.stringify(settings));
+}
+
+const SAMPLE_DOCUMENT: Omit<ReadingDocument, 'id' | 'createdAt' | 'updatedAt'> = {
+  title: 'A three-stop reset between meetings',
+  source: 'paste',
+  currentIndex: 0,
+  notes: [{ id: 'sample-note', paragraph: 1, text: 'A useful pause is small enough to keep.', createdAt: 0 }],
+  paragraphs: [
+    'Before the next tab opens, give this one paragraph your whole field of view. A bounded reading space makes returning easier because there is only one clear place to begin.',
+    'Choose the next sentence, not the whole unfinished piece. If a thought matters, leave one short note beside this stop and keep moving at your own pace.',
+    'When you leave, the rail remembers this stop. There is no feed to catch up with and no score to protect; the next paragraph will still be waiting.'
+  ],
+};
+
+async function seedDemo(): Promise<void> {
+  if (!demoMode || documents.length) return;
+  const now = Date.now();
+  const sample: ReadingDocument = { ...SAMPLE_DOCUMENT, id: 'demo:three-stop-reset', notes: SAMPLE_DOCUMENT.notes.map((note) => ({ ...note, createdAt: now })), createdAt: now, updatedAt: now };
+  await saveDocument(sample);
+  documents = await listDocuments();
 }
 
 function icon(name: 'route' | 'arrow-left' | 'arrow-right' | 'note' | 'settings' | 'books' | 'timer' | 'play' | 'pause'): string {
@@ -55,12 +75,13 @@ function shell(content: string, page: 'app' | 'legal' = 'app'): string {
     <header class="site-header">
       <a class="brand" href="/" data-home aria-label="Reading Sprint Rail home"><span class="brand-mark">${icon('route')}</span><span>Reading Sprint Rail</span></a>
       <nav aria-label="Primary">
-        ${page === 'app' ? `<button class="quiet-button" data-shelf>${icon('books')}<span class="nav-label">Shelf</span><span class="count">${documents.length}</span></button><button class="icon-button" data-settings aria-label="Reading settings">${icon('settings')}</button>` : '<a href="/">Open the reader</a>'}
+        ${page === 'app' ? `<a class="quiet-link" href="/demo">Demo</a><button class="quiet-button" data-shelf>${icon('books')}<span class="nav-label">Shelf</span><span class="count">${documents.length}</span></button><button class="icon-button" data-settings aria-label="Reading settings">${icon('settings')}</button>` : '<a href="/">Open the reader</a>'}
       </nav>
     </header>
     <div class="connection-banner" data-offline hidden role="status">Offline — your reading and notes still work.</div>
+    ${demoMode ? '<aside class="demo-banner" aria-label="Demo controls"><strong>Demo — sample data, nothing is saved</strong><span><button class="demo-control" data-reset-demo>Reset demo</button><a class="demo-control" href="/" data-start-real>Start for real</a></span></aside>' : ''}
     ${content}
-    <footer class="site-footer"><span>Local first. No feeds, tracking, or cloud account.</span><span><a href="/privacy" data-route>Privacy</a> · <a href="/terms" data-route>Terms</a> · Hero artwork generated for this product.</span></footer>
+    <footer class="site-footer"><span>Reading Sprint Rail · a local reading utility.</span><span><a href="/privacy" data-route>Privacy</a> · <a href="/terms" data-route>Terms</a> · Built by Param Factory · Hero artwork generated for this product.</span></footer>
     <div class="toast" data-toast role="status" aria-live="polite" hidden></div>
     ${page === 'app' ? dialogs() : ''}`;
 }
@@ -70,15 +91,16 @@ function homeView(): string {
   return shell(`<main id="main" class="home-main">
     <section class="hero-copy" aria-labelledby="page-title">
       <div class="eyebrow"><span class="station-dot"></span> One paragraph. One place.</div>
-      <h1 id="page-title">Keep the thread.<br><span>Finish the piece.</span></h1>
-      <p class="lede">A quiet, offline rail for articles and EPUB chapters. Read one adjustable paragraph at a time, take notes where they belong, and return to the exact stop.</p>
+      <h1 id="page-title">Finish reading<br><span>without losing your place.</span></h1>
+      <p class="lede">For ADHD and dyslexic readers: read one adjustable paragraph at a time, keep a note beside it, and return to the exact stop.</p>
+      <p class="demo-cta"><a class="primary-button" href="/demo">Try it with sample data ${icon('arrow-right')}</a><span>Opens a three-stop reading rail right away.</span></p>
       ${recent ? `<button class="resume-route" data-open-doc="${recent.id}"><span><small>Continue from stop ${recent.currentIndex + 1} of ${recent.paragraphs.length}</small><strong>${escapeHtml(recent.title)}</strong></span>${icon('arrow-right')}</button>` : ''}
-      <div class="privacy-line"><span>✓ Stays on this device</span><span>✓ Works offline</span><span>✓ No streaks</span></div>
+      <div class="privacy-line"><span>✓ Reading data stays in this browser</span><span>✓ Continues offline after first visit</span></div>
     </section>
     <section class="import-panel" aria-labelledby="import-title">
       <div class="route-art"><picture><source srcset="/assets/rail-landscape-768.webp 768w, /assets/rail-landscape.webp 1200w" sizes="(max-width: 800px) 100vw, 53vw" type="image/webp"><img src="/assets/rail-landscape.png" width="768" height="512" alt="Abstract paper reading route with a coral paragraph resting on a green rail" fetchpriority="high" decoding="async"></picture><div class="art-caption">A finite route, not an endless feed.</div></div>
       <div class="import-form-wrap">
-        <div class="section-heading"><span class="step-number">01</span><div><h2 id="import-title">Lay down a reading route</h2><p>Paste an article or open an EPUB. Nothing leaves your device.</p></div></div>
+        <div class="section-heading"><span class="step-number">01</span><div><h2 id="import-title">Lay down a reading route</h2><p>Paste an article or open an EPUB. Your text is processed in this browser.</p></div></div>
         <form id="paste-form">
           <label for="document-title">Title</label>
           <input id="document-title" name="title" maxlength="100" autocomplete="off" placeholder="The piece I want to finish">
@@ -143,13 +165,12 @@ function shelfView(): string {
   return shell(`<main id="main" class="shelf-main"><div class="shelf-heading"><div><span class="eyebrow"><span class="station-dot"></span> Your routes</span><h1>Return without searching.</h1><p>Every route remembers its paragraph and attached notes on this device.</p></div><button class="primary-button" data-new-route>New reading route</button></div>
     ${documents.length ? `<ul class="document-list">${documents.map((doc) => { const pct = Math.round(((doc.currentIndex + 1) / doc.paragraphs.length) * 100); return `<li><button class="document-open" data-open-doc="${doc.id}"><span class="doc-source">${doc.source === 'epub' ? 'EPUB' : 'PASTED TEXT'}</span><strong>${escapeHtml(doc.title)}</strong><span>Stop ${doc.currentIndex + 1} of ${doc.paragraphs.length} · ${doc.notes.length} ${doc.notes.length === 1 ? 'note' : 'notes'}</span><i><b style="width:${pct}%"></b></i></button><button class="delete-doc" data-delete-doc="${doc.id}" aria-label="Delete ${escapeHtml(doc.title)}">Delete</button></li>`; }).join('')}</ul>` : `<div class="empty-state"><span>${icon('route')}</span><h2>No routes yet</h2><p>Paste an article or open an EPUB to create your first bounded reading rail.</p><button class="primary-button" data-new-route>Create a route</button></div>`}
     <section class="data-tools" aria-labelledby="data-title"><div><h2 id="data-title">Your data, in your hands</h2><p>Export documents, reading positions, and notes as JSON, or restore them on another device.</p></div><div><button class="outline-button" data-export>Export data</button><label class="outline-button" for="import-data">Import data</label><input class="visually-hidden" id="import-data" type="file" accept="application/json,.json"></div></section>
-    <section class="unlock-panel" aria-labelledby="unlock-title"><div><span class="eyebrow">${unlocked ? 'Rail Pass active' : 'Optional Rail Pass'}</span><h2 id="unlock-title">${unlocked ? 'Unlimited shelf unlocked.' : 'Keep more routes ready.'}</h2><p>${unlocked ? 'Thank you for supporting a focused, tracker-free tool.' : 'The free shelf holds 3 documents. A ₹499 one-time Rail Pass unlocks unlimited documents and future visual presets. Reading controls, notes, breaks, and export stay free.'}</p></div>${unlocked ? '<span class="license-active">✓ Licensed on this device</span>' : `<div class="unlock-actions"><a class="primary-button" href="${checkoutUrl}">Buy once — ₹499</a><button class="quiet-button" data-restore>Restore a license</button></div>`}</section>
   </main>`);
 }
 
 function legalView(kind: 'privacy' | 'terms'): string {
-  const privacy = `<main id="main" class="legal-main"><div class="eyebrow">Plain-language policy · 28 August 2026</div><h1>Privacy is the default.</h1><p class="lede">Reading Sprint Rail does not need an account and does not send your documents, notes, positions, or settings to us.</p><h2>What stays on your device</h2><p>Imported text, extracted EPUB text, reading positions, notes, and preferences are stored in your browser using IndexedDB and local storage. You can export or delete them from the Shelf. Clearing site data also removes them.</p><h2>License checks</h2><p>If you buy or restore a Rail Pass, the license token is stored in your browser and sent to the Sociobot billing API only to verify that unlock. Sociobot/Dodo is the merchant of record and handles checkout information under its own policies. Your reading content is never included.</p><h2>Network and measurement</h2><p>The installed app works offline after its first load. We include no advertising, behavioral analytics, third-party fonts, tracking pixels, or social SDKs. The hosting platform may retain short-lived security logs and a privacy-respecting aggregate page count.</p><h2>Your choices</h2><p>Use “Export data” before moving browsers. Use each document’s Delete control or clear this site’s browser storage to erase local data. Questions can be sent to <a href="mailto:privacy@sociobot.in">privacy@sociobot.in</a>.</p></main>`;
-  const terms = `<main id="main" class="legal-main"><div class="eyebrow">Fair-use terms · 28 August 2026</div><h1>Terms for a quiet reading tool.</h1><p class="lede">Reading Sprint Rail is a personal reading utility, not a medical device, diagnostic service, or promise of a particular outcome.</p><h2>Using the product</h2><p>You may use the app to read material you are permitted to access. You remain responsible for copyright and for any text or EPUB you import. The app extracts text locally and does not bypass access controls.</p><h2>Free and paid access</h2><p>The free version includes the core reader, three saved documents, notes, accessibility settings, breaks, and export. The ₹499 Rail Pass is a one-time purchase that unlocks unlimited saved documents and future visual presets for this product. Sociobot/Dodo is the merchant of record. Refunds are handled there; a refunded or revoked license stops unlocking paid features.</p><h2>Availability and warranty</h2><p>The product is provided “as is” without guarantees of uninterrupted availability or fitness for a particular purpose. Keep exports of anything important. To the extent allowed by law, liability is limited to the amount you paid for the product.</p><h2>Changes and contact</h2><p>Material changes will be dated on this page. Questions about purchases or these terms can be sent to <a href="mailto:support@sociobot.in">support@sociobot.in</a>.</p></main>`;
+  const privacy = `<main id="main" class="legal-main"><div class="eyebrow">Plain-language policy · 28 August 2026</div><h1>Privacy is the default.</h1><p class="lede">Reading Sprint Rail does not need an account and does not send your documents, notes, positions, or settings to us.</p><h2>What stays on your device</h2><p>Imported text, extracted EPUB text, reading positions, notes, and preferences are stored in your browser using IndexedDB and local storage. You can export or delete them from the Shelf. Clearing site data also removes them.</p><h2>Network and measurement</h2><p>The installed app works offline after its first load. We include no advertising, behavioral analytics, third-party fonts, tracking pixels, or social SDKs. The hosting platform may retain short-lived security logs and a privacy-respecting aggregate page count.</p><h2>Your choices</h2><p>Use “Export data” before moving browsers. Use each document’s Delete control or clear this site’s browser storage to erase local data. Questions can be sent to <a href="mailto:privacy@sociobot.in">privacy@sociobot.in</a>.</p></main>`;
+  const terms = `<main id="main" class="legal-main"><div class="eyebrow">Fair-use terms · 28 August 2026</div><h1>Terms for a quiet reading tool.</h1><p class="lede">Reading Sprint Rail is a personal reading utility, not a medical device, diagnostic service, or promise of a particular outcome.</p><h2>Using the product</h2><p>You may use the app to read material you are permitted to access. You remain responsible for copyright and for any text or EPUB you import. The app extracts text locally and does not bypass access controls.</p><h2>Availability and warranty</h2><p>The product is provided “as is” without guarantees of uninterrupted availability or fitness for a particular purpose. Keep exports of anything important. To the extent allowed by law, liability is limited to the amount you paid for the product.</p><h2>Changes and contact</h2><p>Questions about these terms can be sent to <a href="mailto:support@sociobot.in">support@sociobot.in</a>.</p></main>`;
   return shell(kind === 'privacy' ? privacy : terms, 'legal');
 }
 
@@ -167,25 +188,29 @@ function dialogs(): string {
     <fieldset><legend>Appearance</legend><label><input type="radio" name="theme" value="system"> System</label><label><input type="radio" name="theme" value="light"> Light</label><label><input type="radio" name="theme" value="dark"> Dark</label></fieldset>
   </div><div class="dialog-actions"><button class="primary-button" value="save">Save settings</button></div></form></dialog>
   <dialog id="break-dialog"><div class="break-dialog"><div class="break-geometry" aria-hidden="true"><i></i><i></i><i></i></div><span class="eyebrow">A small pause</span><h2>Let the paragraph settle.</h2><p>Look away, drop your shoulders, or simply sit for a moment. Continue whenever you are ready.</p><button class="primary-button" data-end-break>Return to the rail</button></div></dialog>
-  <dialog id="restore-dialog"><form method="dialog" id="restore-form" class="dialog-shell"><div class="dialog-head"><div><span class="eyebrow">Rail Pass</span><h2>Restore your purchase</h2></div><button class="icon-button" value="cancel" aria-label="Close">×</button></div><label for="license-token">License token</label><textarea id="license-token" rows="3" required autocomplete="off" placeholder="Paste the token from your receipt"></textarea><p class="form-help">Verification uses the Sociobot billing service. It never receives your documents or notes.</p><div class="dialog-actions"><button class="primary-button" value="verify">Verify license</button></div></form></dialog>`;
+  `;
 }
 
 function render(): void {
   stopWordCue();
   const path = location.pathname.replace(/\/$/, '') || '/';
-  if (path === '/privacy') app.innerHTML = legalView('privacy');
-  else if (path === '/terms') app.innerHTML = legalView('terms');
-  else if (activeView === 'reader') app.innerHTML = readerView();
-  else if (activeView === 'shelf') app.innerHTML = shelfView();
-  else app.innerHTML = homeView();
+  if (path === '/privacy') { document.title = 'Privacy — Reading Sprint Rail'; app.innerHTML = legalView('privacy'); }
+  else if (path === '/terms') { document.title = 'Terms — Reading Sprint Rail'; app.innerHTML = legalView('terms'); }
+  else if (!['/', '/demo'].includes(path)) { document.title = 'Page not found — Reading Sprint Rail'; app.innerHTML = notFoundView(); }
+  else if (activeView === 'reader') { document.title = demoMode ? 'Demo — Reading Sprint Rail' : 'Reading Sprint Rail — keep your place'; app.innerHTML = readerView(); }
+  else if (activeView === 'shelf') { document.title = 'Shelf — Reading Sprint Rail'; app.innerHTML = shelfView(); }
+  else { document.title = 'Reading Sprint Rail — keep your place'; app.innerHTML = homeView(); }
   applySettings(); bindEvents(); updateConnection();
+}
+
+function notFoundView(): string {
+  return shell('<main id="main" class="legal-main"><div class="eyebrow">Wrong stop</div><h1>This route does not exist.</h1><p class="lede">Return to the reader and open a route that is ready for you.</p><p><a class="primary-button" href="/">Open the reader</a></p></main>', 'legal');
 }
 
 function setStatus(message: string, kind: 'ok' | 'error' = 'ok'): void { statusMessage = message; statusKind = kind; render(); }
 function toast(message: string): void { const el = document.querySelector<HTMLElement>('[data-toast]'); if (!el) return; el.textContent = message; el.hidden = false; window.setTimeout(() => { el.hidden = true; }, 4200); }
 
 async function createDocument(title: string, paragraphs: string[], source: 'paste' | 'epub'): Promise<void> {
-  if (!unlocked && documents.length >= 3) { activeView = 'shelf'; render(); toast('The free shelf holds 3 routes. Delete one or unlock unlimited routes.'); return; }
   const now = Date.now();
   current = { id: crypto.randomUUID(), title: title.trim() || 'Untitled reading', source, paragraphs, currentIndex: 0, notes: [], createdAt: now, updatedAt: now };
   await saveDocument(current); documents = await listDocuments(); activeView = 'reader'; sprintSeconds = settings.sprintMinutes * 60; elapsedSeconds = 0; render();
@@ -240,10 +265,12 @@ function pauseSprint(): void { sprintRunning = false; if (sprintTimer) window.cl
 
 function bindEvents(): void {
   document.querySelectorAll<HTMLElement>('[data-route]').forEach((link) => link.addEventListener('click', (event) => { event.preventDefault(); history.pushState({}, '', (link as HTMLAnchorElement).href); render(); window.scrollTo(0, 0); }));
-  document.querySelectorAll<HTMLElement>('[data-home]').forEach((el) => el.addEventListener('click', (event) => { event.preventDefault(); history.pushState({}, '', '/'); activeView = 'home'; render(); }));
-  document.querySelectorAll<HTMLElement>('[data-shelf]').forEach((el) => el.addEventListener('click', () => { history.pushState({}, '', '/'); activeView = 'shelf'; render(); }));
+  document.querySelectorAll<HTMLElement>('[data-home]').forEach((el) => el.addEventListener('click', (event) => { event.preventDefault(); history.pushState({}, '', demoMode ? '/demo' : '/'); activeView = 'home'; render(); }));
+  document.querySelectorAll<HTMLElement>('[data-shelf]').forEach((el) => el.addEventListener('click', () => { history.pushState({}, '', demoMode ? '/demo' : '/'); activeView = 'shelf'; render(); }));
   document.querySelectorAll<HTMLElement>('[data-new-route]').forEach((el) => el.addEventListener('click', () => { activeView = 'home'; statusMessage = ''; render(); }));
   document.querySelectorAll<HTMLElement>('[data-open-doc]').forEach((el) => el.addEventListener('click', () => { current = documents.find((doc) => doc.id === el.dataset.openDoc) || null; activeView = current ? 'reader' : 'home'; render(); }));
+  document.querySelector('[data-reset-demo]')?.addEventListener('click', async () => { await clearDocuments(); localStorage.removeItem('demo:rsr:settings'); location.assign('/demo'); });
+  document.querySelector('[data-start-real]')?.addEventListener('click', async (event) => { event.preventDefault(); await clearDocuments(); localStorage.removeItem('demo:rsr:settings'); location.assign('/'); });
   document.querySelector('[data-prev]')?.addEventListener('click', () => moveParagraph(-1));
   document.querySelector('[data-next]')?.addEventListener('click', () => moveParagraph(1));
   document.querySelector('[data-sprint]')?.addEventListener('click', toggleSprint);
@@ -277,9 +304,6 @@ function bindEvents(): void {
   settingsDialog?.querySelector<HTMLInputElement>('[name=lineHeight]')?.addEventListener('input', (event) => { settingsDialog.querySelector('[data-leading-output]')!.textContent = Number((event.currentTarget as HTMLInputElement).value).toFixed(2); });
   settingsDialog?.addEventListener('close', () => { if (settingsDialog.returnValue !== 'save') return; const form = settingsDialog.querySelector<HTMLFormElement>('form')!; const data = new FormData(form); settings = { ...settings, font: data.get('font') as Settings['font'], theme: data.get('theme') as Settings['theme'], fontSize: Number(data.get('fontSize')), lineHeight: Number(data.get('lineHeight')), sprintMinutes: Number(data.get('sprintMinutes')), breakMinutes: Number(data.get('breakMinutes')), wpm: Number(data.get('wpm')), wordCue: data.has('wordCue'), contrast: data.has('contrast'), reduceMotion: data.has('reduceMotion') }; sprintSeconds = settings.sprintMinutes * 60; elapsedSeconds = 0; applySettings(); render(); toast('Reading settings saved.'); });
   document.querySelector('[data-end-break]')?.addEventListener('click', () => { (document.querySelector('#break-dialog') as HTMLDialogElement).close(); toggleSprint(); });
-  const restoreDialog = document.querySelector<HTMLDialogElement>('#restore-dialog');
-  document.querySelector('[data-restore]')?.addEventListener('click', () => restoreDialog?.showModal());
-  restoreDialog?.addEventListener('close', async () => { if (restoreDialog.returnValue !== 'verify') return; const token = restoreDialog.querySelector<HTMLTextAreaElement>('#license-token')?.value.trim(); if (!token) return; storeLicense(token); toast('Checking this license…'); try { const result = await verifyLicense(true); unlocked = result.valid; render(); toast(result.valid ? 'Rail Pass restored.' : 'That license is not active. Check the token and try again.'); } catch { render(); toast('License check unavailable. Your free reader still works.'); } });
 }
 
 function updateConnection(): void { const banner = document.querySelector<HTMLElement>('[data-offline]'); if (banner) banner.hidden = navigator.onLine; }
@@ -303,11 +327,12 @@ async function registerServiceWorker(): Promise<void> {
 }
 
 async function init(): Promise<void> {
-  captureLicenseFromUrl(); applySettings();
+  applySettings();
   try { documents = await listDocuments(); } catch { statusMessage = 'Local storage is unavailable. You can read now, but this browser may not save your place.'; statusKind = 'error'; }
+  await seedDemo();
   const latest = documents[0]; if (latest) current = latest;
+  if (demoMode && current) activeView = 'reader';
   render();
-  if (getLicense()) { try { const result = await verifyLicense(); unlocked = result.valid; if (!result.valid) toast('Rail Pass license is no longer active.'); render(); } catch { /* use cached verdict offline */ } }
   void registerServiceWorker();
 }
 

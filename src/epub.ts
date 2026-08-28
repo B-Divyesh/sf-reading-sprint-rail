@@ -1,8 +1,15 @@
 import { normalizeParagraphs } from './text';
 
+type ZipArchive = Awaited<ReturnType<(typeof import('jszip'))['loadAsync']>>;
+
 export async function parseEpub(file: File): Promise<{ title: string; paragraphs: string[] }> {
-  const { default: JSZip } = await import('jszip');
-  const zip = await JSZip.loadAsync(await file.arrayBuffer());
+  let zip: ZipArchive;
+  try {
+    const { default: JSZip } = await import('jszip');
+    zip = await JSZip.loadAsync(await file.arrayBuffer());
+  } catch {
+    throw new Error('This file is not a readable EPUB. Choose a standard .epub file and try again.');
+  }
   const containerFile = zip.file('META-INF/container.xml');
   if (!containerFile) throw new Error('This EPUB has no container file. Try exporting it again.');
   const container = new DOMParser().parseFromString(await containerFile.async('text'), 'application/xml');

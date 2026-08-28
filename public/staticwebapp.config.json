@@ -1,0 +1,36 @@
+{
+  "routes": [
+    { "route": "/demo", "rewrite": "/index.html" },
+    { "route": "/privacy", "rewrite": "/index.html" },
+    { "route": "/terms", "rewrite": "/index.html" },
+    {
+      "route": "/assets/*",
+      "headers": { "Cache-Control": "public, max-age=31536000, immutable" }
+    },
+    {
+      "route": "/manifest.webmanifest",
+      "headers": {
+        "Cache-Control": "public, max-age=86400",
+        "Content-Type": "application/manifest+json"
+      }
+    },
+    { "route": "/sw.js", "headers": { "Cache-Control": "no-cache" } }
+  ],
+  "navigationFallback": {
+    "rewrite": "/404.html",
+    "exclude": ["/assets/*", "/*.{css,js,png,jpg,svg,webp,ico,woff2,json,txt,xml,wasm}"]
+  },
+  "globalHeaders": {
+    "Content-Security-Policy": "default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self'; img-src 'self' data: blob:; manifest-src 'self'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; worker-src 'self'; frame-ancestors 'none'; upgrade-insecure-requests",
+    "Permissions-Policy": "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY"
+  },
+  "responseOverrides": {
+    "404": {
+      "rewrite": "/404.html",
+      "statusCode": 404
+    }
+  }
+}

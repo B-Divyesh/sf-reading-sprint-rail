@@ -1,6 +1,8 @@
 import type { ReadingDocument } from './types';
 
-const DB_NAME = 'reading-sprint-rail';
+const DB_NAME = location.pathname === '/demo' || new URLSearchParams(location.search).get('demo') === '1'
+  ? 'demo:reading-sprint-rail'
+  : 'reading-sprint-rail';
 const STORE = 'documents';
 
 function openDb(): Promise<IDBDatabase> {
@@ -49,6 +51,16 @@ export async function replaceAllDocuments(documents: ReadingDocument[]): Promise
     const store = tx.objectStore(STORE);
     store.clear();
     documents.forEach((document) => store.put(document));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function clearDocuments(): Promise<void> {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).clear();
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });

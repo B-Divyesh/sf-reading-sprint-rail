@@ -1,5 +1,5 @@
-const VERSION = 'rsr-shell-v2';
-const RUNTIME = 'rsr-runtime-v2';
+const VERSION = 'rsr-shell-v3';
+const RUNTIME = 'rsr-runtime-v3';
 const STATIC_SHELL = [
   '/', '/offline.html', '/manifest.webmanifest',
   '/assets/icon.svg', '/assets/icon-192.png', '/assets/icon-512.png', '/assets/icon-maskable-512.png',
