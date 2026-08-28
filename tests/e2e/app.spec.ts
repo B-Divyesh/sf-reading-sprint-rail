@@ -231,8 +231,13 @@ test('@claim:shelf-resume reopens the last saved paragraph and its note from the
   await page.getByRole('button', { name: /One stop ahead/ }).click();
   await page.getByLabel('One-line note for paragraph 2').fill('Resume from this marker.');
   await page.getByRole('button', { name: 'Save note' }).click();
+  // The shelf must derive from the reader's write-through state even before
+  // the asynchronous IndexedDB queue has completed.
+  await page.getByRole('button', { name: 'Shelf', exact: true }).click();
+  await expect(page.getByText('Stop 2 of 3 · 1 note')).toBeVisible();
+  // Then prove the queued snapshot is durable across an actual reload.
   await page.reload();
-  await page.getByRole('button', { name: /^Shelf/ }).click();
+  await page.getByRole('button', { name: /^Shelf/ }).first().click();
   await expect(page.getByText('Resume route')).toBeVisible();
   await expect(page.getByText('Stop 2 of 3 · 1 note')).toBeVisible();
   await page.locator('.document-open').filter({ hasText: 'Resume route' }).click();

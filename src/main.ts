@@ -1,5 +1,6 @@
 import './styles.css';
 import { clearDocuments, deleteDocument, listDocuments, listDocumentsWithRecovery, replaceAllDocuments, saveDocument } from './db';
+import { copyDocument, shelfProgressSummary, upsertDocument } from './documents';
 import { parseEpub } from './epub';
 import { escapeHtml, normalizeParagraphs } from './text';
 import { DEFAULT_SETTINGS, type ReadingDocument, type Settings } from './types';
@@ -22,6 +23,9 @@ let sprintTimer: number | null = null;
 let statusMessage = '';
 let statusKind: 'ok' | 'error' = 'ok';
 let shouldFocusRouteHeading = false;
+// Each reader edit gets an immutable, ordered persistence snapshot. This
+// prevents an earlier position save from racing a later note save.
+let documentWriteQueue: Promise<void> = Promise.resolve();
 const BUILD_ID = '1.0.1';
 
 function loadSettings(): Settings {
@@ -165,7 +169,7 @@ function readerView(): string {
 
 function shelfView(): string {
   return shell(`<main id="main" class="shelf-main" tabindex="-1"><div class="shelf-heading"><div><span class="eyebrow"><span class="station-dot"></span> Your routes</span><h1>Return without searching.</h1><p>Every route remembers its paragraph and attached notes on this device.</p></div><button class="primary-button" data-new-route>New reading route</button></div>
-    ${documents.length ? `<ul class="document-list">${documents.map((doc) => { const pct = Math.round(((doc.currentIndex + 1) / doc.paragraphs.length) * 100); return `<li><button class="document-open" data-open-doc="${doc.id}"><span class="doc-source">${doc.source === 'epub' ? 'EPUB' : 'PASTED TEXT'}</span><strong>${escapeHtml(doc.title)}</strong><span>Stop ${doc.currentIndex + 1} of ${doc.paragraphs.length} · ${doc.notes.length} ${doc.notes.length === 1 ? 'note' : 'notes'}</span><i><b style="width:${pct}%"></b></i></button><button class="delete-doc" data-delete-doc="${doc.id}" aria-label="Delete ${escapeHtml(doc.title)}">Delete</button></li>`; }).join('')}</ul>` : `<div class="empty-state"><span>${icon('route')}</span><h2>No routes yet</h2><p>Paste an article or open an EPUB to create your first bounded reading rail.</p><button class="primary-button" data-new-route>Create a route</button></div>`}
+    ${documents.length ? `<ul class="document-list">${documents.map((doc) => { const pct = Math.round(((doc.currentIndex + 1) / doc.paragraphs.length) * 100); return `<li><button class="document-open" data-open-doc="${doc.id}"><span class="doc-source">${doc.source === 'epub' ? 'EPUB' : 'PASTED TEXT'}</span><strong>${escapeHtml(doc.title)}</strong><span>${shelfProgressSummary(doc)}</span><i><b style="width:${pct}%"></b></i></button><button class="delete-doc" data-delete-doc="${doc.id}" aria-label="Delete ${escapeHtml(doc.title)}">Delete</button></li>`; }).join('')}</ul>` : `<div class="empty-state"><span>${icon('route')}</span><h2>No routes yet</h2><p>Paste an article or open an EPUB to create your first bounded reading rail.</p><button class="primary-button" data-new-route>Create a route</button></div>`}
     <section class="data-tools" aria-labelledby="data-title"><div><h2 id="data-title">Your data, in your hands</h2><p>Export documents, reading positions, and notes as JSON, or restore them on another device.</p></div><div><button class="outline-button" data-export>Export data</button><label class="outline-button">Import data<input class="visually-hidden" id="import-data" type="file" accept="application/json,.json"></label></div></section>
   </main>`);
 }
@@ -254,7 +258,15 @@ async function createDocument(title: string, paragraphs: string[], source: 'past
   await saveDocument(current); documents = await listDocuments(); activeView = 'reader'; sprintSeconds = settings.sprintMinutes * 60; elapsedSeconds = 0; render();
 }
 
-async function persistCurrent(): Promise<void> { if (!current) return; current.updatedAt = Date.now(); await saveDocument(current); documents = await listDocuments(); }
+async function persistCurrent(): Promise<void> {
+  if (!current) return;
+  const snapshot = copyDocument({ ...current, updatedAt: Date.now() });
+  current = snapshot;
+  documents = upsertDocument(documents, snapshot);
+  const write = documentWriteQueue.then(() => saveDocument(snapshot));
+  documentWriteQueue = write.catch(() => undefined);
+  await write;
+}
 
 function moveParagraph(direction: -1 | 1): void {
   if (!current) return;
