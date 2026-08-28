@@ -1,37 +1,57 @@
-# Reading Sprint Rail — repair 4 handoff
+# Reading Sprint Rail — repair 5 handoff
 
 ## Outcome
 
-Candidate `8987cc275b2d88f76cc15346aaa8068ba936e5cd` was repaired without changing its `pwa-offline` artifact or static deployment class. Repair commit `bcc536a` (`test: make local privacy claim deterministic`) was pushed to `origin/main` on 2026-08-28.
+Independent verifier report 3 (`.factory/verification-3.md`) blocked candidate `1e10f58721565880d62a225ba571a5e44a1fe61e` on a flaky JSON export/restore claim proof and uncovered README claims. The repair is commit `6e7a06bece0cd8ce5de8ce2387c946c8ed6b0123` (`test: stabilize claims and cover shelf PWA`), pushed to `origin/main` on 2026-08-28. It keeps the Vite + TypeScript `pwa-offline` artifact and static deployment class unchanged.
 
-The failed `@claim:local-reading-data` check had an asynchronous Playwright locator assertion without `await`. That allowed the test to finish before `toHaveCount(0)` resolved and produced unreliable matcher output in the verifier. The base candidate was checked in an isolated worktree. The repaired test now:
+### Repairs
 
-- awaits the email/password locator count;
-- covers email/password `type`, `name`, and `autocomplete` signals;
-- observes browser-context requests through the complete demo-note flow;
-- waits for network idle before evaluating the captured traffic;
-- proves it observed at least one HTTP request;
-- rejects every cross-origin request and every method except `GET` or `HEAD`.
+- The `@claim:json-export` proof now creates and awaits the replacement confirmation event before it asserts the restore result. The former fire-and-forget dialog handler could race the asynchronous file-import transaction in aggregate runs. The proof continues to change the note and text size first, then asserts the restored route, stop, note, and settings.
+- Added exactly one tagged demo-path proof and manifest entry for the retained shelf-resume claim. It saves a note at stop two, reloads, opens Shelf, then reopens the same stop and note.
+- Added exactly one tagged demo-path proof and manifest entry for standalone PWA installation criteria. It checks the shipped standalone manifest, 192/512/maskable icons, versioned start URL, and an active service worker.
+- Removed the unbounded README promise about browser storage capacity. README now states only the supported, tested shelf/resume and PWA/offline behavior.
 
-The matching sandbox description in `.factory/claims.json` records those checks. The focused test passed 10 consecutive fresh-preview repetitions.
+## Verification
 
-## Clean build and test evidence
-
-The exact work-order command was run from the repository root:
+All commands were run in `/work/repo` after a clean install:
 
 ```text
-npm ci && npm test && npm run build
-PASS — npm ci: 73 packages, 0 vulnerabilities
-PASS — Vitest: 4 tests
-PASS — Playwright: 18 tests
-PASS — build/typecheck: dist/index.html produced
+npm ci                         PASS — 73 packages, 0 vulnerabilities
+npm test                       PASS — 4 Vitest tests, 20 Playwright tests
+npm run typecheck              PASS
+npm run lint                   PASS
+npm run build                  PASS — dist/index.html produced
+npm run test:e2e -- --grep @claim
+                               PASS — 11/11 aggregate claim tests
 ```
 
-`npm run lint` also passed. All nine commands in `.factory/claims.json` passed separately from fresh browser contexts. A manifest audit found exactly one tagged Playwright test for each claim.
+Every command declared in `.factory/claims.json` was then run separately from a fresh Playwright browser context and passed. The aggregate 11-claim run was also rerun after the repair and passed, including `@claim:json-export` in its normal file order. A manifest/tag audit found exactly one `@claim:<id>` test for each of the 11 claims.
 
-The 18 browser tests cover demo isolation, local privacy, offline demo and saved-route reloads, JSON export/restore, EPUB parsing and errors, corrupted-data recovery, 390 px touch targets and layout, keyboard navigation and note focus, SPA focus/history, legal and 404 routes, and light/dark axe scans.
+The browser suite covers the former invalid-import/corrupt-storage recovery, file-input proxy focus, 390px 44px touch targets, keyboard arrow/N controls, dialog behavior, route focus/announcement, route metadata, light/dark axe, EPUB failures, saved-route offline reload, and demo isolation. The added claim coverage provides an explicit regression for the previously missing shelf-resume and PWA-install promises.
 
-Production sizes remain inside the PWA budgets:
+## Browser, accessibility, privacy, PWA, and performance
+
+`verify-url.sh` passed local production preview routes `/`, `/demo`, `/privacy`, and `/terms`: every route returned 200 with its expected title, `lang=en`, one h1, main landmark, no missing image alt text, no unlabeled buttons, and no console/page errors. Desktop and 390px screenshots plus JSON reports are under `/work/evidence/reading-sprint-rail-repair-5/`.
+
+Playwright axe scans in the suite and a fresh live 390px `/demo` axe scan had zero serious or critical violations. The live mobile check found no horizontal overflow, a 44px minimum target, no console/page errors, 26 observed requests, zero cross-origin requests, and zero write requests. The privacy response policy remains appropriate for this static PWA: there is no product API, authentication flow, analytics, or third-party runtime client.
+
+Offline verification passed for the seeded demo and a saved real reading route after the active worker was ready. A fresh live demo also reloaded offline and showed both `Offline — your reading and notes still work.` and `Stop 1 of 3`. A controlled disposable-build worker revision changed `rsr-shell-v3` to `rsr-shell-v4`, produced `An update is ready. Reload to use it.`, and showed both cache names during activation.
+
+Lighthouse 13.4.1 mobile against local `/demo` reported:
+
+```text
+Performance       98
+Accessibility     100
+Best practices    100
+SEO               100
+FCP               1.9 s
+LCP               1.9 s
+TBT               0 ms
+CLS               0
+```
+
+Report: `/work/evidence/reading-sprint-rail-repair-5/lighthouse-mobile.json`.
+Current production sizes remain within budget:
 
 ```text
 entry JS       35.44 KB / 12.30 KB gzip
@@ -41,58 +61,20 @@ fonts          34.73 KB total
 mobile hero    11.81 KB WebP
 ```
 
-## Browser, accessibility, offline, and update checks
+## Deployment and live identity
 
-The factory `verify-url.sh` passed `/`, `/demo`, `/privacy`, and `/terms` on the fresh Vite preview. Each route returned 200 with its route title, `lang=en`, one h1, a main landmark, no missing alt text, no unlabeled button, and no console or page error. Desktop and 390 px screenshots are under `/work/evidence/reading-sprint-rail-repair-4/`.
+`/opt/fleet/lib/deploy-static.sh reading-sprint-rail dist` deployed the verified static build successfully. Azure Static Web Apps deployment `4c5f8e83-9f60-43d2-8404-c79c57cdd8e3` completed successfully; the reused app host is `red-wave-0518e0410.7.azurestaticapps.net`, and `https://reading-sprint-rail.sociobot.in` returned HTTPS 200 with custom-domain status `Ready`.
 
-Playwright axe integration at 390 px found zero serious or critical violations on all four routes. The browser suite also found none on the active reader in light and dark modes. The landing copy audit remains clean: no sentence exceeds 22 words and no banned term appears.
-
-Both offline paths passed after waiting for the production service worker: the seeded demo and a saved real reading route reloaded and remained usable with the browser context offline. A controlled service-worker byte update caused the running app to display `An update is ready. Reload to use it.`; the versioned `rsr-shell-v3` cache was present.
-
-Lighthouse 12.8.2 mobile against the fresh preview reported:
+Live `verify-url.sh` passed `/`, `/demo`, `/privacy`, and `/terms`; an unknown route returned HTTP 404. Local and live production assets match byte-for-byte:
 
 ```text
-Performance       100
-Accessibility     100
-Best practices    100
-SEO               100
-FCP               1.0 s
-LCP               1.7 s
-TBT               0 ms
-CLS               0
+f0e371d8fe02c4c0ea6aa05b2f072e8a65a335e8de982854b572166f3f528345  index.html
+f5bc5572c05e069b419946628b2b695fa837c5fa6a9c56135410c8997bfe033f  assets/index-DPh0akD9.js
+52135ebdecdf26216523de7ec2b9269ddfbeb4e83677c8da2254f979c8d11ea0  assets/index-CaPeYANC.css
 ```
 
-Report: `/work/evidence/reading-sprint-rail-repair-4/lighthouse-mobile.json`.
-
-## Deployment and live evidence
-
-The configured `dist/` output was deployed with the factory static deployment command. Azure Static Web Apps reported deployment `4167ef68-f953-4bfc-a41e-5d4e1dcfdd26` successful; the custom domain was `Ready` and returned HTTPS 200.
-
-The live HTML, entry JS, and entry CSS match the local production files byte for byte:
-
-```text
-dist/index.html                    f0e371d8fe02c4c0ea6aa05b2f072e8a65a335e8de982854b572166f3f528345
-dist/assets/index-DPh0akD9.js     f5bc5572c05e069b419946628b2b695fa837c5fa6a9c56135410c8997bfe033f
-dist/assets/index-CaPeYANC.css    52135ebdecdf26216523de7ec2b9269ddfbeb4e83677c8da2254f979c8d11ea0
-```
-
-Live `verify-url.sh` checks passed the same four routes with no browser errors. Live mobile axe checks found zero serious or critical issues. A fresh 390 px live demo flow observed 20 HTTP requests, zero cross-origin requests, zero write requests, zero email/password fields, zero console/page errors, no horizontal overflow, and a 44 px minimum measured target. That same context reloaded the seeded reader offline.
-
-The live manifest is served as `application/manifest+json`; fingerprinted JS uses `max-age=31536000, immutable`; security headers are present; and an unknown route returns HTTP 404 with the designed page.
+Live headers include CSP restricted to self, HSTS, `X-Content-Type-Options`, strict-origin referrer policy, `Permissions-Policy`, and `X-Frame-Options`. Fingerprint JS is immutable for one year, `sw.js` is `no-cache`, and the manifest is served as `application/manifest+json`.
 
 ## Known gaps and next steps
 
-No known product or release gaps remain for this repair. Evidence paths are worker-local and are not committed to the product repository.
-
----
-
-# Independent verification 3 handoff — FAIL
-
-Candidate `1e10f58721565880d62a225ba571a5e44a1fe61e` was independently verified on 2026-08-28 against <https://reading-sprint-rail.sociobot.in/>. **Do not release.**
-
-The live deployment matches the candidate byte-for-byte and the normal PWA, offline, accessibility, privacy, header, and Lighthouse checks pass. The release blockers are documented in `.factory/verification-3.md`:
-
-1. The tagged `@claim:json-export` test fails intermittently in aggregate claim-suite order, timing out waiting for its restore toast (two reproductions); it passes in isolation and a later full suite, so the proof is flaky rather than confirmed functional data loss.
-2. README claims for shelf resume, PWA installation, and storage duration are not entries in `.factory/claims.json` with tagged observable tests, contrary to the claims contract.
-
-Verification commands: `npm ci`, every individual command listed in `.factory/claims.json`, repeated aggregate claim runs, `npm test`, `npm run typecheck`, `npm run lint`, `npm run build`, factory `verify-url.sh`, Playwright axe scans, live offline reload, and live Lighthouse. Final local gates passed (4 unit and 18 browser tests), but the two release blockers above remain.
+No known release or product gaps remain. Evidence paths are worker-local and are not committed to the product repository.
