@@ -53,17 +53,35 @@ test('@claim:demo-isolation keeps demo changes out of real storage and discards 
   expect(namespaces).toEqual({ real: 0, demo: 0 });
 });
 
-test('@claim:local-reading-data keeps reading local with no account, upload, tracking, or third-party runtime requests', async ({ page }) => {
-  const requests: string[] = [];
-  page.on('request', (request) => requests.push(request.url()));
+test('@claim:local-reading-data keeps reading local with no account, upload, tracking, or third-party runtime requests', async ({ page, context }) => {
+  const requests: Array<{ method: string; url: string }> = [];
+  context.on('request', (request) => requests.push({ method: request.method(), url: request.url() }));
   await page.goto('/demo');
+  await page.waitForLoadState('networkidle');
   await page.getByRole('button', { name: 'Write a note' }).click();
   await page.getByLabel('One-line note for paragraph 1').fill('Saved locally.');
   await page.getByRole('button', { name: 'Save note' }).click();
   await expect(page.getByText('Saved locally.')).toBeVisible();
-  expect(requests.every((url) => new URL(url).origin === new URL(page.url()).origin)).toBe(true);
-  expect(requests).toHaveLength(requests.filter((url) => new URL(url).origin === new URL(page.url()).origin).length);
-  expect(page.locator('input[type="password"], [name*="email" i], [name*="password" i]')).toHaveCount(0);
+  await page.waitForLoadState('networkidle');
+
+  const accountFields = page.locator([
+    'input[type="email"]',
+    'input[type="password"]',
+    'input[name*="email" i]',
+    'input[name*="password" i]',
+    'input[autocomplete="email"]',
+    'input[autocomplete="current-password"]',
+    'input[autocomplete="new-password"]',
+  ].join(', '));
+  await expect(accountFields).toHaveCount(0);
+
+  const appOrigin = new URL(page.url()).origin;
+  const runtimeRequests = requests.filter(({ url }) => ['http:', 'https:'].includes(new URL(url).protocol));
+  expect(runtimeRequests.length, 'the privacy check must observe the demo runtime traffic').toBeGreaterThan(0);
+  const crossOriginRequests = runtimeRequests.filter(({ url }) => new URL(url).origin !== appOrigin);
+  expect(crossOriginRequests, `cross-origin runtime requests: ${crossOriginRequests.map(({ url }) => url).join(', ')}`).toEqual([]);
+  const uploadRequests = runtimeRequests.filter(({ method }) => !['GET', 'HEAD'].includes(method));
+  expect(uploadRequests, `unexpected runtime writes: ${uploadRequests.map(({ method, url }) => `${method} ${url}`).join(', ')}`).toEqual([]);
 });
 
 test('@claim:offline-reading reloads the seeded demo after the first visit', async ({ page, context }) => {

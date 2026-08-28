@@ -18,7 +18,7 @@
     "claim": "Reading data stays in this browser; no account, cloud upload, tracking, or third-party runtime request is needed to read and save a note.",
     "where": "Home facts, import guidance, README, Privacy",
     "test": "npm run test:e2e -- --grep @claim:local-reading-data",
-    "sandbox": "Fresh demo flow intercepts every request and confirms only same-origin app assets are requested while a note is saved."
+    "sandbox": "Fresh demo flow observes browser-context traffic, confirms at least one runtime request, only same-origin GET/HEAD traffic, saves a note, and asserts there are no email or password fields."
   },
   {
     "id": "offline-reading",
