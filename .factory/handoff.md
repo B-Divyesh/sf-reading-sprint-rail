@@ -43,6 +43,8 @@ Playwright axe on `/`, `/demo`, `/privacy`, and `/terms` at 390 px reported zero
 
 The static deployment contract remains `npm ci && npm test && npm run build`, publishing `dist/`. `staticwebapp.config.json` continues to provide the existing CSP, permissions/referrer/frame/content-type headers, asset cache policy, route rewrites, and designed 404 response.
 
-## Known gaps / next step
+## Deployment and known gaps
 
-No product gaps are known. Lighthouse CLI was attempted with the installed Playwright Chromium but could not attach to it in this container; bundle budgets and all functional/accessibility checks pass. Push this commit to trigger the configured static deployment, then verify the published URL’s deployment identity and headers.
+Commit `d2f13ab04aff58e2120394a850635895f115ccee` was pushed to `origin/main`. The configured static release command completed locally and produced `dist/`. A live identity/header check immediately after push still served the prior `index-Bed8ETlT.js` deployment at 11:54 UTC, so the host’s static synchronization had not completed within the worker window. Its current response policy remains present (HSTS, CSP, permissions, referrer, frame, and content-type headers). No product gaps are known.
+
+Lighthouse CLI was attempted with the installed Playwright Chromium but could not attach to it in this container; bundle budgets and all functional/accessibility checks pass. Verify live identity after the static host completes its normal push-triggered synchronization.
