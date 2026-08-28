@@ -1,0 +1,30 @@
+{
+  "slug": "reading-sprint-rail",
+  "title": "Reading Sprint Rail",
+  "territory": "utilities",
+  "user": "An ADHD or dyslexic reader who wants to finish an article or EPUB chapter without losing their place, switching tabs, or separating notes from reading.",
+  "evidence": [
+    {
+      "url": "https://hn.algolia.com/api/v1/items/49256926",
+      "date": "2026-08-11",
+      "quote_or_summary": "ReadAware’s author says existing readers are clunky and force people to wander between apps and lose attention rather than keeping reading support in one place."
+    },
+    {
+      "url": "https://github.com/anomalyco/opencode/issues/12503",
+      "date": "2026-02-06",
+      "quote_or_summary": "A current 14-reaction request for configurable font family and size reinforces that reading presentation must adapt to the individual."
+    }
+  ],
+  "recurrence": "The direct reading complaint and a current neurodiversity-first product both point to sustained demand; the cost is abandoned reading and fragmented notes.",
+  "current_workaround": "Use a timer, hide apps manually, switch to paper, or use a generic read-later/reader app with notes elsewhere.",
+  "incumbents_and_gap": "Reader Mode, Pocket, Readwise Reader, and speed-reader apps simplify content but do not combine a deliberately bounded reading rail, resumable place, and tiny local capture queue without feeds or engagement mechanics.",
+  "smallest_useful_product": "An offline PWA that opens pasted text/EPUB, displays one adjustable paragraph rail with optional word highlight and scheduled micro-breaks, and saves one-line notes tied to location. Non-goals: social feeds, AI summaries, streaks, or diagnosis/treatment claims.",
+  "success_measure": "In a two-week pilot, at least 60% of users complete five 15-minute reading sessions and resume the same document without manually finding their place.",
+  "artifact_class": "pwa-offline",
+  "monetization": "one-time — the core value is an offline personal reading environment, with no reason to gate attention support behind a subscription.",
+  "constraints": "Keep documents and notes on device; expose motion/reduced-animation and contrast controls; avoid medical efficacy claims and addictive streak design.",
+  "est_build_effort": "S",
+  "why_distinct": "It is a deliberately low-stimulation session tool with location-linked notes, not a content recommendation or LLM reading wrapper.",
+  "confidence": 4,
+  "state": "RESEARCHED"
+}

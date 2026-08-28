@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Reading Sprint Rail">
+  <rect width="512" height="512" rx="112" fill="#f4f0e6"/>
+  <path d="M70 256h372" stroke="#1e6f5c" stroke-width="28" stroke-linecap="round"/>
+  <circle cx="112" cy="256" r="43" fill="#182523"/>
+  <circle cx="400" cy="256" r="43" fill="#182523"/>
+  <rect x="184" y="128" width="144" height="256" rx="24" fill="#c84f3d"/>
+  <path d="M218 190h76M218 230h76M218 270h58" stroke="#fffaf0" stroke-width="16" stroke-linecap="round"/>
+</svg>
