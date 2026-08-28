@@ -296,8 +296,9 @@ function keyboardNavigation(event: KeyboardEvent): void {
 async function registerServiceWorker(): Promise<void> {
   if (!('serviceWorker' in navigator) || import.meta.env.DEV) return;
   try {
-    const registration = await navigator.serviceWorker.register('/sw.js');
+    const registration = await navigator.serviceWorker.register('/sw.js', { updateViaCache: 'none' });
     registration.addEventListener('updatefound', () => { const worker = registration.installing; worker?.addEventListener('statechange', () => { if (worker.state === 'installed' && navigator.serviceWorker.controller) { toast('An update is ready. Reload to use it.'); } }); });
+    await navigator.serviceWorker.ready;
   } catch { /* The app remains usable without installation support. */ }
 }
 

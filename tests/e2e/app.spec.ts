@@ -71,8 +71,15 @@ test('app shell and saved reading work offline', async ({ page, context }) => {
   await page.getByLabel('Title').fill('Offline route');
   await page.getByLabel('Article or chapter text').fill(passage);
   await page.getByRole('button', { name: /Start at the first paragraph/ }).click();
-  await page.evaluate(() => navigator.serviceWorker.ready);
-  await page.waitForTimeout(400);
+  await page.waitForFunction(async () => {
+    await navigator.serviceWorker.ready;
+    return navigator.serviceWorker.controller?.state === 'activated';
+  });
+  await page.waitForFunction(async () => {
+    const entryAssets = [...document.querySelectorAll<HTMLScriptElement | HTMLLinkElement>('script[src], link[rel="stylesheet"]')]
+      .map((element) => element instanceof HTMLScriptElement ? element.src : element.href);
+    return entryAssets.length > 0 && (await Promise.all(entryAssets.map((url) => caches.match(url)))).every(Boolean);
+  });
   await context.setOffline(true);
   await page.reload();
   await expect(page.getByText('Offline — your reading and notes still work.')).toBeVisible();
