@@ -51,13 +51,15 @@ lazy JSZip     97.36 KB / 30.16 KB gzip (EPUB import only)
 
 ## Deployment and live identity
 
-Pending deployment of the pushed repair with:
+`/opt/fleet/lib/deploy-static.sh reading-sprint-rail dist` deployed the verified build successfully on 2026-08-28. Azure Static Web Apps deployment `a8c8e6ce-3151-4138-abc7-5ae6888994d2` completed successfully on the reused Central US app host `red-wave-0518e0410.7.azurestaticapps.net`; the custom domain is Ready and `https://reading-sprint-rail.sociobot.in` returned HTTPS 200.
+
+Post-deploy `verify-url.sh` passed live `/`, `/demo`, `/privacy`, and `/terms` with the same semantic/a11y and zero-console-error results as preview. `/not-a-real-route` returned HTTP 404. The deployed JavaScript asset exactly matched the local verified build:
 
 ```text
-/opt/fleet/lib/deploy-static.sh reading-sprint-rail dist
+b5b4a49662cdda9c5e4bb012697f89c71aad1cefa185bd12cae15603018ae222  assets/index-DB9eOL29.js
 ```
 
-The deployment result and post-deploy live checks will be appended after the static upload completes.
+Live response headers include HSTS, self-only CSP, no-cache `sw.js`, `X-Content-Type-Options: nosniff`, strict-origin referrer policy, permissions policy, and `X-Frame-Options: DENY`.
 
 ## Known gaps
 
